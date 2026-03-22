@@ -11,6 +11,18 @@ pub fn gcd(mut a: u64, mut b: u64) -> u64 {
 	}
 	a
 }
+/// for i64
+/// Greatest Common Divisor
+/// Time: O(log(min(a, b)))
+#[inline]
+pub fn gcd_i(mut a: i64, mut b: i64) -> i64 {
+	while b != 0 {
+		let r = a % b;
+		a = b;
+		b = r;
+	}
+	a
+}
 
 /// Least Common Multiple
 /// Optimization: Divides by GCD first to avoid overflow, casts to u128 for safety.
@@ -21,18 +33,34 @@ pub fn lcm(a: u64, b: u64) -> u64 {
 	((a as u128 * b as u128) / gcd(a, b) as u128) as u64
 }
 
-/// Extended Euclidean Algorithm
-/// Returns (g, x, y) such that a*x + b*y = g
+/// Least Common Multiple
+/// Optimization: Divides by GCD first to avoid overflow, casts to u128 for safety.
+/// Time: O(log(min(a, b)))
 #[inline]
-pub fn ext_gcd(a: i64, b: i64) -> (i64, i64, i64) {
-	if b == 0 {
-		(a, 1, 0)
-	} else {
-		let (g, x1, y1) = ext_gcd(b, a % b);
-		(g, y1, x1 - (a / b) * y1)
-	}
+pub fn lcm_i(a: i64, b: i64) -> i64 {
+	if a == 0 || b == 0 { return 0; }
+	((a as i128 * b as i128) / gcd_i(a, b) as i128) as i64
 }
 
+/// Extended Euclidean Algorithm
+/// Returns (g, x, y) such that a*x + b*y = g
+pub fn extended_gcd_iterative(mut a: i64, mut b: i64) -> (i64, i64, i64) {
+	let (mut x, mut last_x) = (0, 1);
+	let (mut y, mut last_y) = (1, 0);
+
+	while b != 0 {
+		let q = a / b;
+
+		// Update a and b
+		(a, b) = (b, a % b);
+
+		// Update coefficients without extra named variables
+		(x, last_x) = (last_x - q * x, x);
+		(y, last_y) = (last_y - q * y, y);
+	}
+
+	(a, last_x, last_y)
+}
 /// Safe Modular Multiplication (a * b % m)
 /// Uses u128 to strictly prevent overflow.
 #[inline]
@@ -147,10 +175,10 @@ pub fn phi_euler(mut n: u64) -> u64 {
 	result
 }
 
-/// Linear Sieve
-/// Returns (spf, primes)
-/// spf[i] = Smallest Prime Factor of i
-/// primes = List of all primes up to n
+/// Linear Sieve;
+/// Returns (spf, primes);
+/// spf[i] = Smallest Prime Factor of i;
+/// primes = List of all primes up to n;
 /// Time: O(nlog(log(n)))
 pub fn linear_sieve(n: usize) -> (Vec<usize>, Vec<usize>) {
 	let mut spf = vec![0; n + 1];
@@ -231,4 +259,56 @@ pub fn ncr(n: usize, r: usize, fact: &[u64], inv_fact: &[u64], m: u64) -> u64 {
 pub fn npr(n: usize, r: usize, fact: &[u64], inv_fact: &[u64], m: u64) -> u64 {
 	if r > n { return 0; }
 	mul_mod(fact[n], inv_fact[n - r], m)
+}
+
+/// Lucas Theorem
+/// REQUIRES: p is prime (small)
+/// REQUIRES: fact and inv_fact are precomputed up to p-1
+/// Time: O(p + log_p(n))
+/// Calculates nCr where n and r are really big
+/// Precomputing factorial upto n is not possible
+pub fn ncr_lucas(mut n: u64, mut r: u64, p: u64, fact: &[u64], inv_fact: &[u64]) -> u64 {
+	if r > n { return 0; }
+
+	let mut result = 1;
+
+	while n > 0 || r > 0 {
+		let ni = n % p;
+		let ri = r % p;
+
+		if ri > ni {
+			return 0;
+		}
+
+		result = result * ncr(ni, ri, fact, inv_fact, p) % p;
+
+		n /= p;
+		r /= p;
+	}
+
+	result
+}
+
+
+
+
+/// X = a (mod m1)
+/// X = b (mod m2)
+/// x*m1+ y*m2 = g
+///
+/// X = a*x*(m1/g) + b*y*(m2/g)
+
+#[inline]
+fn chinese_remainder_theorem(a:u64, b:u64, m1:u64, m2:u64)->Option<u64>{
+
+	let (g,x,y) = extended_gcd_iterative(m1 as i64,m2 as i64);
+	let g = g as u64;
+	let lcm = (n/g*m) as i64;
+	let x = ((x%lcm+lcm)%lcm) as u64;
+	let y = ((y%lcm+lcm)%lcm) as u64;
+	let lcm = lcm as u64;
+	if b.abs_diff(a)%g!=0 {None}
+	else{
+		Some((a*y*m2/g+b*x*m1/g)%lcm)
+	}
 }
