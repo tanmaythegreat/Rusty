@@ -41,18 +41,20 @@ fn partition_point<T,P>(mut start:T,mut end:T,step:T,mut pred: P)->Result<T,u8>
 /// space complexity O(1)
 /// Time Complexity O(log(size))
 /// where size is (end-start)/step
-fn find_some_minima<T,P,U>(mut start:T, mut end:T, step:T, mut f:P) -> Result<T, u8>
+fn find_some_minima<T,P,U>(mut start:T, mut end:T, step:T, mut f:P) -> Result<(T,U), u8>
                            where
 	                           P : FnMut(T)->U,
-	                           U : Sub<Output=U> + PartialOrd + From<u8>,
+	                           U : Sub<Output=U> + PartialOrd + From<u8> + Copy,
 	                           T : Copy + Add<Output = T> + Sub<Output = T> + From<u8> + Div<Output=T> + PartialOrd
 {
 	if step<=T::from(0){return Err(0);}
 
 	let mut initial_point=start+(end-start)/T::from(2);
+	let mut F = f(initial_point);
 	while start<=end{
 		initial_point=start+(end-start)/T::from(2);
-		let derivative = f(initial_point+step)-f(initial_point);
+		F = f(initial_point);
+		let derivative = f(initial_point+step)-F;
 		if derivative>=U::from(0){
 			end = initial_point-step;
 		}
@@ -60,7 +62,7 @@ fn find_some_minima<T,P,U>(mut start:T, mut end:T, step:T, mut f:P) -> Result<T,
 			start = initial_point+step;
 		}
 	}
-	Ok(initial_point)
+	Ok((initial_point,F))
 }
 
 ///For a function f(x), if there is a single maxima in the domain [[start,end]] then
@@ -69,18 +71,19 @@ fn find_some_minima<T,P,U>(mut start:T, mut end:T, step:T, mut f:P) -> Result<T,
 /// space complexity O(1)
 /// Time Complexity O(log(size))
 /// where size is (end-start)/step
-fn find_some_maxima<T,P,U>(mut start:T, mut end:T, step:T, mut f:P) -> Result<T, u8>
+fn find_some_maxima<T,P,U>(mut start:T, mut end:T, step:T, mut f:P) -> Result<(T,U), u8>
                            where
 	                           P : FnMut(T)->U,
-	                           U : Sub<Output=U> + PartialOrd + From<u8>,
+	                           U : Sub<Output=U> + PartialOrd + From<u8> + Copy,
 	                           T : Copy + Add<Output = T> + Sub<Output = T> + From<u8> + Div<Output=T> + PartialOrd
 {
 	if step<=T::from(0){return Err(0);}
-
 	let mut initial_point=start+(end-start)/T::from(2);
+	let mut F = f(initial_point);
 	while start<=end{
 		initial_point=start+(end-start)/T::from(2);
-		let derivative = f(initial_point+step)-f(initial_point);
+		F = f(initial_point);
+		let derivative = f(initial_point+step)-F;
 		if derivative>=U::from(0){
 			start = initial_point+step;
 		}
@@ -88,5 +91,5 @@ fn find_some_maxima<T,P,U>(mut start:T, mut end:T, step:T, mut f:P) -> Result<T,
 			end = initial_point-step;
 		}
 	}
-	Ok(initial_point)
+	Ok((initial_point,F))
 }
