@@ -1,4 +1,5 @@
 use std::mem;
+use std::random::random;
 
 /// Greatest Common Divisor  
 /// Time: O(log(min(a, b)))  
@@ -203,6 +204,28 @@ pub fn divisors(n: u64) -> Vec<u64> {
 	res
 }
 
+/// computes divisors upto n (inclusive)  
+/// O(nlog(n))
+pub fn precompute_divisors(n:usize){
+	let divisors : Vec<Vec<u64>> = vec![Vec::with_capacity(n.ilog2()+1);n+1];
+	for i in 1..=n{
+		for j in (i..=n).step_by(i){
+			divisors[j].push(i);
+		}
+	}divisors
+}
+
+///number of divisors = ∏ (exponent+1)
+/// 
+pub fn number_of_divisors_from_prime_factors(a:&Vec<(u64,u32)>)->u32{
+	a.iter().fold(1,|r,&i|i.1*(r+1))
+}
+
+///Sum = ∏ (prime^(exponent+1)-1)/(prime-1)
+/// 
+pub fn sum_of_divisors_from_prime_factors(a:&Vec<(u64,u32)>)->u64{
+	a.iter().fold(1,|r,&i|r*(i.0.pow(i.1+1)-1)/(i.0-1))
+}
 /// Euler's Totient Function (Phi)  
 /// Count of numbers <= n coprime to n.  
 /// Time: O(sqrt(n))  
@@ -436,4 +459,44 @@ pub fn convert_to_base(mut num: u64, to_base: u64) -> Result<Vec<u64>,u64> {
 	}
 	digits.reverse();
 	Ok(digits)
+}
+
+/// Harmonic group (n) 
+/// list of tuple (start,end,val)
+/// such that all the numbers i between start and end (inclusive) floor(n/i) = val
+#[inline]
+pub fn harmonic_group(n:u64)->Vec<(u64,u64,u64)>{
+	let ans : Vec<(u64,u64,u64)> =  Vec::with_capacity(2*n.isqrt() as usize); 
+	let mut start = 1;
+	while start <= n{
+		let val = n/ start;
+		let end = n/val;
+		start = end+1;
+		ans.push((start,end,val));
+	}
+	ans
+}
+
+
+///binary exponenciation with a custom multiplication rule
+#[inline]
+pub fn binary_exponentiation<T:Clone,U:FnMut(&mut T,&T)>(base:T,exponent:usize,mut multiply:U)->Option<T>
+{
+	if exponent==0{
+		return None;
+	}
+	else if exponent==1{
+		return Some(base);
+	}
+	let mut Ans = base.clone();
+	let mut bit = 1<<(usize::BITS-exponent.leading_zeros()-1);
+	while bit>1{
+		let temp = Ans.clone();
+		multiply(&mut Ans,&temp);
+		bit = bit>>1;
+		if exponent&bit!=0{
+			multiply(&mut Ans,&base);
+		}
+	}
+	Some(Ans)
 }

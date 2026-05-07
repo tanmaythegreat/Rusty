@@ -1,13 +1,11 @@
-use std::cmp::{max, min, Ordering, Reverse};
-use std::collections::{BTreeMap, BTreeSet, BinaryHeap, HashMap, HashSet};
-use std::fmt::{Debug, Formatter};
-use std::future::pending;
-use std::io::{stdin, stdout, Write};
+use std::cmp::min;
+use std::collections::HashMap;
+use std::fmt::Debug;
+use std::hash::Hash;
+use std::io::{stdin, Read};
 use std::iter::FromIterator;
 use std::ops::{Add, AddAssign, Div, Sub, SubAssign};
-use std::str::{FromStr, SplitAsciiWhitespace};
-use std::thread::current;
-use std::vec;
+use std::str::FromStr;
 
 fn int<T: FromStr>() -> T {
     let mut input = String::new();
@@ -34,7 +32,7 @@ fn int3<T, U,V>() -> (T, U,V) where
     V: FromStr,
     T::Err: Debug,
     U::Err: Debug,
-    V::Err: Debug, {
+    V::Err: Debug,{
     let mut input = String::new();
     stdin().read_line(&mut input).unwrap();
 
@@ -53,7 +51,8 @@ fn int4<T, U,V,W>() -> (T, U,V,W) where
     T::Err: Debug,
     U::Err: Debug,
     V::Err: Debug,
-    W::Err: Debug, {
+    W::Err: Debug,
+{
     let mut input = String::new();
     stdin().read_line(&mut input).unwrap();
 
@@ -75,7 +74,7 @@ fn int5<T, U,V,W,M>() -> (T, U,V,W,M) where
     U::Err: Debug,
     V::Err: Debug,
     W::Err: Debug,
-    M::Err: Debug, {
+    M::Err: Debug,{
     let mut input = String::new();
     stdin().read_line(&mut input).unwrap();
 
@@ -88,7 +87,6 @@ fn int5<T, U,V,W,M>() -> (T, U,V,W,M) where
         it.next().unwrap().parse::<M>().unwrap()
     )
 }
-#[inline]
 fn array<T: FromStr,B:FromIterator<T>>() -> B {
     let mut input = String::new();
     stdin().read_line(&mut input).unwrap();
@@ -111,9 +109,10 @@ fn word2() -> (String,String) {
     let mut a = input.trim().split_whitespace();
     (a.next().unwrap().to_string(),a.next().unwrap().to_string())
 }
+
 fn int_word<T>() -> (T, String) where
     T: FromStr,
-    T::Err: Debug, {
+    T::Err: Debug,{
     let mut input = String::new();
     stdin().read_line(&mut input).unwrap();
 
@@ -125,87 +124,571 @@ fn int_word<T>() -> (T, String) where
 }
 
 
-/// Extended Euclidean Algorithm
-/// Returns (g, x, y) such that a*x + b*y = g
-pub fn extended_gcd_iterative(mut a: i64, mut b: i64) -> (i64, i64, i64) {
-    let (mut x, mut last_x) = (0, 1);
-    let (mut y, mut last_y) = (1, 0);
-
-    while b != 0 {
-        let q = a / b;
-
-        // Update a and b
-        (a, b) = (b, a % b);
-
-        // Update coefficients without extra named variables
-        (x, last_x) = (last_x - q * x, x);
-        (y, last_y) = (last_y - q * y, y);
-    }
-
-    (a, last_x, last_y)
-}
-
-///Bezout's Identity generalised
-///O(n^2)
-/// it is possible to optimise to O(n) will do it soon..
-fn bezout_cofficients(arr:&[i64])->(i64,Vec<i64>){
-    if arr.len()==0{
-        (0,vec![])
-    }
-    else if arr.len()==1{
-        (arr[0],vec![1])
-    }
-    else{
-        let mut g = arr[0];
-        let mut coff:Vec<i64> = vec![1];
-        coff.reserve(arr.len());
-        for i in 2..arr.len(){
-            let x:i64;
-            let y:i64;
-            (g,x,y) = extended_gcd_iterative(g,arr[i]);
-            for i in &mut coff{
-                *i*=x;
-            }
-            coff.push(y);
+/// Returns the value of the partition point according to the given predicate (the first element of the second partition).
+///
+/// O(1) space Complexity
+/// O(log(n))
+/// n is the Range size
+/// First partition maps to true
+/// Second partition maps to false
+/// start and end both inclusive
+/// step = 1 (recommended) , for floats step = tolerable error
+fn partition_point<T,P>(mut start:T,mut end:T,step:T,mut pred: P)->Result<T,u8>
+                        where
+                            P : FnMut(T) -> bool,
+                            T : PartialOrd + Copy
+                            + Add<Output = T>
+                            + Sub<Output = T>
+                            + Div<Output = T>
+                            + From<u8>
+{
+    if step==T::from(0){return Err(0)}
+    let mut ans = end+step;
+    while start<=end{
+        let mid = start+(end-start)/T::from(2);
+        if pred(mid)
+        {
+            start = mid+step;
         }
-        (g,coff)
+        else
+        {
+            ans = mid;
+            end = mid-step;
+        }
+    }
+    Ok(ans)
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct BinaryIndexedTree<T> where T: Default + Copy + PartialEq + PartialOrd + Add<Output = T> + Sub<Output = T> + AddAssign + SubAssign{
+    tree: Vec<T>,
+    len: usize,
+    capacity: usize,
+}
+
+impl<T> BinaryIndexedTree<T>
+where
+    T: Default + Copy + PartialEq + PartialOrd + Add<Output = T> + Sub<Output = T> + AddAssign + SubAssign,
+{
+    /// Creates a new BinaryIndexTree in which `max_size` many elements can be stored.
+    /// This cannot be expanded later.
+    pub fn new(max_size: usize) -> Self {
+        Self {
+            tree: vec![T::default(); max_size + 1],
+            len: 0,
+            capacity: max_size,
+        }
+    }
+
+    /// Returns the number of elements in the tree.
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    /// Returns `true` if pushing was successful, `false` if capacity is full.
+    pub fn push(&mut self, x: T) -> bool {
+        if self.len < self.capacity {
+            self.increment(self.len, x);
+            self.len += 1;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// $O(n)$ building from an existing slice.
+    pub fn from_slice(iterator: &[T]) -> Self {
+        let length = iterator.len();
+        let mut tree = vec![T::default(); length + 1];
+
+        // Copy initial values into the 1-based tree array
+        for i in 0..length {
+            tree[i + 1] = iterator[i];
+        }
+
+        // Ripple the values up the tree in O(n)
+        for i in 1..=length {
+            let j = i + (i & i.wrapping_neg());
+            if j <= length {
+                let val = tree[i];
+                tree[j] += val;
+            }
+        }
+
+        Self {
+            tree,
+            len: length,
+            capacity: length,
+        }
+    }
+
+    /// $O(\log n)$ - Zero-based indexing input.
+    pub fn increment(&mut self, mut index: usize, delta: T) {
+        index += 1;
+        while index <= self.capacity {
+            self.tree[index] += delta;
+            index += index & index.wrapping_neg();
+        }
+    }
+
+    /// $O(\log n)$ - Zero-based indexing input.
+    pub fn decrement(&mut self, mut index: usize, delta: T) {
+        index += 1;
+        while index <= self.capacity {
+            self.tree[index] -= delta;
+            index += index & index.wrapping_neg();
+        }
+    }
+
+    /// $O(\log n)$ - Zero-based indexing. Inclusive of both l and r.
+    pub fn get_range_sum(&self, l: usize, r: usize) -> T {
+        if l > r {
+            panic!("Invalid Range! (l <= r)");
+        }
+        self.prefix_sum(r) - if l == 0 { T::default() } else { self.prefix_sum(l - 1) }
+    }
+
+    /// Sum of first k+1 elements. If k == 0: return first element.
+    /// $O(\log n)$
+    pub fn prefix_sum(&self, mut k: usize) -> T {
+        let mut sum: T = T::default();
+        k += 1;
+        while k > 0 {
+            sum += self.tree[k];
+            k -= k & k.wrapping_neg();
+        }
+        sum
+    }
+
+    /// Finds the smallest index such that prefix sum >= k.
+    /// Output is a Zero-based index. $O(\log n)$
+    pub fn binary_search(&self, mut k: T) -> usize {
+        let mut i = 0;
+        let mut step = 1;
+
+        // Find the largest power of 2 that bounds the capacity
+        while step <= self.capacity {
+            step <<= 1;
+        }
+
+        while step > 0 {
+            if i + step <= self.capacity && self.tree[i + step] < k {
+                k -= self.tree[i + step];
+                i += step;
+            }
+            step >>= 1;
+        }
+        i // 0-based index
+    }
+}
+struct OrderedMultiSet {
+    binary_indexed_tree : BinaryIndexedTree<usize>,
+    present : Vec<usize>,
+    len:usize
+}
+
+impl OrderedMultiSet {
+    fn len(self:&Self)->usize{self.len}
+    fn new(n: usize) -> Self {
+        OrderedMultiSet {
+            binary_indexed_tree: BinaryIndexedTree::new(n+1),
+            present: vec![0; n+1],len:0
+        }
+    }
+    ///Can store numbers including 0 and MAX
+    fn from(iterator : Vec<usize>, MAX:usize) -> OrderedMultiSet {
+        let mut set = OrderedMultiSet {
+            binary_indexed_tree:BinaryIndexedTree::new(MAX+1),
+            present: vec![0; MAX+1],len:0
+        };
+        for i in iterator{
+            set.insert(i);
+        }set
+    }
+    /// return true if the element exist in the Set
+    fn contains(&self,x:usize)->bool{
+        self.present[x]>0
+    }
+    /// return the number of times the element exist in the Set
+    fn count(&self,x:usize)->usize{
+        self.present[x]
+    }
+    fn insert(&mut self, x: usize) {
+        self.present[x] += 1;
+        self.len+=1;
+        self.binary_indexed_tree.increment(x, 1); //+1 so that can also store 0
+    }
+    ///remove only one instance
+    fn remove(&mut self, x: usize) ->bool{
+        if self.present[x ]>0 {
+            self.len-=1;
+            self.present[x ] -= 1;
+            self.binary_indexed_tree.decrement(x, 1); //+1 so that ,can also store 0
+            true
+        }else{false}
+    }
+
+    /// number of elements < x
+    fn order_of_key(&mut self, x: usize) -> usize {
+        if x  == 0 {
+            0
+        } else {
+            self.binary_indexed_tree.prefix_sum(x-1)
+        }
+    }
+
+    /// kth smallest (0-based)
+    fn find_by_order(&self, k: usize) -> usize {
+        self.binary_indexed_tree.binary_search(k+1)
     }
 }
 
 
-/// General Modular Inverse (Extended Euclidean)  
-/// Works even if m is NOT prime. Returns None if inverse doesn't exist.  
-#[inline]
-pub fn mod_inv_general(n: i64, m: i64) -> Option<i64> {
-    let (g, x, _) = extended_gcd_iterative(n, m);
-    if g != 1 { None } else { Some((x % m + m) % m) }
+struct FullOrderedMultiSet<T:Eq+Hash+Copy> {
+    binary_indexed_tree : BinaryIndexedTree<usize>,
+    present : Vec<usize>, // present[i] represents is Data[i] present in set
+    Data : Vec<T>, //sorted vector that containing possible items that can be inserted
+    mapping: HashMap<T,usize>, // inverse of Data 
+    len : usize
 }
 
-/// Least Common Multiple
-/// Optimization: Divides by GCD first to avoid overflow, casts to u128 for safety.
-/// Time: O(log(min(a, b)))
-#[inline]
-pub fn lcm_i(a: i64, b: i64) -> i64 {
-    if a == 0 || b == 0 { return 0; }
-    ((a as i128 * b as i128) / gcd_i(a, b) as i128) as i64
+impl<T:Eq+Hash+Copy> FullOrderedMultiSet<T> {
+
+    /// new() doesn't add the data,it just says that only this data can be added  
+    /// use from() if you want to add data as well  
+    /// /// Data[i-1]<Data[i] this is assumed  
+    fn new(Data : Vec<T>) -> Self {
+        let mut set = FullOrderedMultiSet {
+            binary_indexed_tree: BinaryIndexedTree::new(Data.len()),
+            present: vec![0; Data.len()],
+            mapping : HashMap::with_capacity(Data.len()),
+            Data,
+            len : 0
+        };
+        for i in set.Data.iter().enumerate(){
+            set.mapping.insert(*i.1,i.0);
+        }
+        set
+    }
+    /// same as calling new and then inserting first values of Data   
+    /// Data[[i-1]]<Data[[i]] this is assumed  
+    fn from(Data : Vec<T>,n : usize ) -> FullOrderedMultiSet<T> {
+        let mut set = Self::new(Data);
+        for i in 0..n{
+            set.present[i] += 1;
+            set.len+=1;
+            set.binary_indexed_tree.increment(i, 1);
+        }
+        set
+    }
+    /// return true if the element exist in the Set
+    fn contains(&self,x:&T)->bool{
+        self.present[self.mapping[x]]>0
+    }
+    /// return number of times the element exist in the Set
+    fn count(&self,x:&T)->usize{
+        self.present[self.mapping[x]]
+    }
+    /// return if the insertion was successful (element could be inserted already)
+    /// panics if the element dont exist in data
+    fn insert(&mut self, x:&T){
+        let index = self.mapping[x];
+        self.len+=1;
+        self.present[index] += 1;
+        self.binary_indexed_tree.increment(index, 1);
+    }
+    fn remove(&mut self, x: &T) ->bool{
+        let index = self.mapping[x];
+        if self.present[index]>0 {
+            self.present[index] -= 1;
+            self.len-=1;
+            self.binary_indexed_tree.decrement(index, 1); //+1 so that ,can also store 0
+            true
+        }else{false}
+    }
+    fn len(&self)->usize{
+        self.len
+    }
+    /// number of elements < x
+    fn order_of_key(&mut self, x: &T) -> usize {
+        let x = self.mapping[x];
+        if x  == 0 {
+            0
+        } else {
+            self.binary_indexed_tree.prefix_sum(x-1)
+        }
+    }
+
+    ///kth smallest element in the set 
+    /// for k = 0 returns the smallest element
+    fn find_by_order(&self, k: usize) -> &T {
+        &self.Data[self.binary_indexed_tree.binary_search(k+1)]
+    }
 }
 
-/// Least Common Multiple  
-/// Optimization: Divides by GCD first to avoid overflow, casts to u128 for safety.  
-/// Time: O(n log(min(a, b)))  
-#[inline]
-pub fn lcm_i_arr(a:&[i64]) -> i64 {
-    let mut l = a[0];
-    for &i in a {
-        l = lcm_i(l, i);
-    }l
+
+
+#[derive(Debug, Clone, PartialEq)]
+struct SegmentTree<T,B,C,D> where
+    T: Default + Clone,
+    B : FnMut(&T, &T) -> T,
+    C : FnMut(&T,&T,usize,usize)->T,
+    D : FnMut(&Option<T>,&T)->Option<T>
+{
+    ///length of the array  
+    n:usize,
+    tree: Vec<T>,
+    lazy_tree: Vec<Option<T>>,
+    combiner : B,
+    /// `updater(old_val,update_by_parameter,left,right)->new_val`
+    ///  
+    /// if i want to update the segment information (.i.e segment \[left,right\]) then what will be its new value  
+    /// for example if segment tree is for adding things then   
+    /// ```
+    /// updater = |old_val,update_by_parameter,left,right|  
+    /// {  
+    ///     if left==right{  
+    ///           old_val+update_by_parameter
+    ///     }  
+    ///     else{
+    ///         old_val+(right-left+1)*update_by_val
+    ///     }
+    /// }
+    /// ```  
+    /// if it is know that only no range updates will happen then you may ignore the case when `left != right`  
+    ///
+    updater : C,
+    ///`update_combiner(old_update,update_parameter)->new_update_parameter`  
+    /// 
+    /// if i want to update a number by old_update  
+    /// and then i want to update the same number by update_parameter
+    /// then it is the same as updating the orignal number by new_update_parameter
+    /// 
+    /// # For Example
+    /// if the segment stores the sum of elements then 
+    /// ```
+    /// update_combiner = |old_update,update_parameter|{
+    ///     if let Some(old) = old_update{
+    ///         Some(old+update_parameter)
+    ///     }
+    ///     else{
+    ///         Some(update_parameter)
+    ///     }
+    /// }
+    /// ```
+    /// 
+    update_combiner: D
+
 }
 
-/// for i64  
+#[allow(dead_code)]
+impl<T: Default+Clone,B:FnMut(&T, &T) -> T,C: FnMut(&T, &T, usize, usize)->T,D: FnMut(&Option<T>, &T)->Option<T>> SegmentTree<T,B,C,D>
+{
+    ///creates a segment tree from a array.
+    /// creates a array called tree and a lazy_tree 
+    /// `O(4n)`  
+    /// # Parameters
+    /// * `a`: The initial data source.
+    ///
+    /// * `combiner`: Defines how two child nodes merge to form a parent. 
+    ///   (e.g., `|a, b| a + b` for range sums, or `std::cmp::min` for range minimums).
+    ///
+    /// * `updater`: Logic for applying a pending update to a segment.
+    ///   It maps `(current_segment_value, update_value, left, right)` 
+    ///   to the `new_segment_value`. This must account for the segment length 
+    ///   if the update affects all elements (like adding $X$ to every element in a range).
+    ///
+    /// * `update_combiner`: Defines how to merge two "lazy" updates when they overlap.
+    ///   It takes `(existing_update, incoming_update)` and returns the consolidated 
+    ///   update that represents applying both in sequence.  
+    fn new(a: &Vec<T>,combiner:B,updater:C,update_combiner:D) -> Self {
+        let n: usize = Self::get_closest_pow2(a.len());
+        let mut tree = Self {
+            n:a.len(),
+            tree: vec![T::default(); 2 * n],
+            lazy_tree: vec![None; 2 * n],combiner,updater,update_combiner
+        };
+        tree.build(1, 0, n - 1, &a);
+        tree
+    }
+    /// for internal use only  
+    /// it recursively builds the node by first building the childs  
+    fn build(&mut self,node: usize, left: usize, right: usize, a: &Vec<T>) {
+        if left == right {
+            if left <= a.len() - 1 {
+                self.tree[node] = a[left].clone();
+            }
+        } else {
+            let mid: usize = (left + right) >> 1;
+            self.build(2 * node, left, mid, a);
+            self.build(2 * node + 1, mid + 1, right, a);
+            self.tree[node] = (self.combiner)(&self.tree[2 * node] , &self.tree[2 * node + 1]);
+        }
+    }
+    ///gets the immutable value at index p (0-based)
+    ///`O(logn)`   
+    fn get(&mut self, p: usize) -> T {
+        self.get_range(p, p)
+    }
+
+    /// get the combined information of the range (0-based indexing)  
+    /// based on the `self.combiner` provided  
+    /// `O(logn)`  
+    fn get_range(&mut self, l: usize, r: usize) -> T {
+        if l > r {
+            panic!("Invalid Range! (l <= r)");
+        }
+        self.get_val(1, 0, self.tree.len() / 2 - 1, l, r).unwrap()
+    }
+
+
+    /// get the combined information of the range (0-based indexing)  
+    /// based on the custom `combiner` provided  
+    /// `O(logn)`  
+    fn get_range_custom<U,E:FnMut(&T)->U,F:FnMut(U,U)->U>(&mut self, l: usize, r: usize,mut getter:E,mut combiner:F) -> U {
+        if l > r {
+            panic!("Invalid Range! (l <= r)");
+        }
+        self.get_val_custom(1, 0, self.tree.len() / 2 - 1, l, r,&mut getter,&mut combiner).unwrap()
+    }
+
+    /// updates a single element bases on the updater provided    
+    /// 0-based indexing  
+    fn update(&mut self, ind: usize, val: &T) {
+        self.update_range(ind, ind, val);
+    }
+    /// stores what to update in a lazy tree and apply this update when i try to get this value  
+    /// it uses the `update_combiner` and `updater`   
+    /// `O(logn)`
+    fn update_range(&mut self, l: usize, r: usize, val: &T) {
+        if l > r {
+            panic!("Invalid Range! (l <= r)");
+        }
+        self.update_segment(1, 0, self.tree.len() / 2 - 1, l, r, val);
+    }
+
+    /// for internal use only   
+    /// if you want to update any thing use `update_range`  or `update`  
+    fn update_segment(&mut self, node: usize, left: usize, right: usize, l: usize, r: usize, val: &T) {
+        self.update_lazy(node, left, right);
+
+        if left > r || right < l {
+            return;
+        }
+
+        if left >= l && right <= r {
+            self.tree[node] = (self.updater)(&self.tree[node],val,left,right);
+            if left != right {
+                self.lazy_tree[2 * node] = (self.update_combiner)(&self.lazy_tree[2*node],val);
+                self.lazy_tree[2 * node + 1] = (self.update_combiner)(&self.lazy_tree[2*node+1],val);
+            }
+        } else {
+            let mid: usize = (left + right) >> 1;
+            self.update_segment(2 * node, left, mid, l, r, val);
+            self.update_segment(2 * node + 1, mid + 1, right, l, r, val);
+            self.tree[node] = (self.combiner)(&self.tree[2 * node] , &self.tree[2 * node + 1]);
+        }
+    }
+    /// for internal use only  
+    /// [ l,r ] this range is what i am looking for 
+    /// [ left,right ] there is where i am looking for l,r 
+    fn get_val(&mut self, node: usize, left: usize, right: usize, l: usize, r: usize) -> Option<T> {
+        self.update_lazy(node, left, right);
+
+        if left > r || right < l {
+            return None;
+        }
+
+        if left >= l && right <= r {
+            return Some(self.tree[node].clone());
+        }
+
+        let mid: usize = (left + right) / 2;
+        let left_val = self.get_val(2 * node, left, mid, l, r);
+        let right_val = self.get_val(2 * node + 1, mid + 1, right, l, r);
+        match (left_val, right_val) {
+            (Some(l_val), Some(r_val)) => Some((self.combiner)(&l_val, &r_val)),
+            (Some(val), None) | (None, Some(val)) => Some(val),
+            (None, None) => None,
+        }
+    }
+
+    /// for internal use only  
+    /// [ l,r ] this range is what i am looking for 
+    /// [ left,right ] there is where i am looking for l,r 
+    fn get_val_custom<U,E:FnMut(&T)->U,F:FnMut(U,U)->U>(&mut self, node: usize, left: usize, right: usize, l: usize, r: usize,mut getter:&mut E,mut combiner:&mut F) -> Option<U> {
+        self.update_lazy(node, left, right);
+
+        if left > r || right < l {
+            return None;
+        }
+
+        if left >= l && right <= r {
+            return Some(getter(&self.tree[node]));
+        }
+
+        let mid: usize = (left + right) / 2;
+        let left_val = self.get_val_custom(2 * node, left, mid, l, r,getter,combiner);
+        let right_val = self.get_val_custom(2 * node + 1, mid + 1, right, l, r,getter,combiner);
+        match (left_val, right_val) {
+            (Some(l_val), Some(r_val)) => Some((combiner)(l_val, r_val)),
+            (Some(val), None) | (None, Some(val)) => Some(val),
+            (None, None) => None,
+        }
+    }
+    /// internal use only  
+    /// applies the lazy effect on the node `node`  
+    /// and sets lazy to `None`  
+    fn update_lazy(&mut self, node: usize, left: usize, right: usize) {
+        if let Some(lazy_val) = self.lazy_tree[node].clone(){
+            self.tree[node] = (self.updater)(&self.tree[node],&lazy_val,left,right);
+            if left != right {
+                self.lazy_tree[2 * node] = (self.update_combiner)(&self.lazy_tree[2*node],&lazy_val);
+                self.lazy_tree[2 * node + 1] = (self.update_combiner)(&self.lazy_tree[2*node+1],&lazy_val);
+            }
+            self.lazy_tree[node] = None;
+        }
+    }
+    fn get_closest_pow2(val: usize) -> usize {
+        if val & (val - 1) == 0 {
+            return val;
+        }
+        (usize::MAX >> val.leading_zeros()) + 1
+    }
+
+    /// Flushes all lazy updates from the root down to the leaves.
+    /// After calling this, the leaf nodes in `self.tree` will contain 
+    /// the most up-to-date values.
+    /// Complexity: O(N)
+    fn get_all_elements(&mut self) -> Vec<T>{
+        let n = self.tree.len() / 2;
+        let mut V  = vec![T::default();self.n];
+        self.collect_values(1, 0, n - 1,&mut V);
+        V
+    }
+    /// internal use only   
+    /// calls update_lazy for every node  
+    /// overall complexity is `O(n)`  
+    fn collect_values(&mut self, node: usize, left: usize, right: usize,arr : &mut Vec<T>) {
+        // Apply this node's lazy first, then push down
+        self.update_lazy(node, left, right);
+
+        if left == right {
+            if let Some(v) = arr.get_mut(left){*v = self.tree[node].clone();}
+            return;
+        }
+
+        let mid = (left + right) / 2;
+        self.collect_values(2 * node, left, mid,arr);
+        self.collect_values(2 * node + 1, mid + 1, right,arr);
+    }
+
+}
+
 /// Greatest Common Divisor  
 /// Time: O(log(min(a, b)))  
 #[inline]
-pub fn gcd_i(mut a: i64, mut b: i64) -> i64 {
+pub fn gcd(mut a: usize, mut b: usize) -> usize {
     while b != 0 {
         let r = a % b;
         a = b;
@@ -213,199 +696,29 @@ pub fn gcd_i(mut a: i64, mut b: i64) -> i64 {
     }
     a
 }
-
-/// X = a1 (mod n1)  
-/// X = a2 (mod n2)  
-/// ...  
-/// X = ak (mod nk)  
-///
-/// N = ∏ ni [i = 1,2,...,k]  
-/// Ni = ∏ nj [j != i] = N/ni  
-/// bi = inverse of Ni mod ni  
-/// X = Σai\*Ni\*bi  
-#[inline]
-fn chinese_remainder_theorem_know_that_n_are_coprime(a:&[i64],n:&[i64])->i128
-{
-    assert_eq!(a.len(),n.len());
-    let N = n.iter().fold(1,|a,&b|a*b);
-    (0..n.len()).map(|i|{
-        let ni = n[i];
-        let Ni = N/ni;
-        let bi = mod_inv_general(Ni,ni).unwrap();
-        (a[i]*Ni*bi) as i128
-    }).sum::<i128>()%(N as i128)
-}
-
-/// General Chinese Remainder Theorem for an arbitrary number of equations.  
-/// Works even if moduli are NOT pairwise coprime.  
-/// uses 2 variable chinese_remainder_theorem function 
-/// Returns Option<(final_remainder, final_lcm)> .i.e X=final_remainder (mod final lcm)
-pub fn chinese_remainder_theorem_general(a: &[u64], m: &[u64]) -> Option<(u64, u64)> {
-    assert_eq!(a.len(), m.len(), "Arrays must be of equal length");
-    if a.is_empty() {
-        return None;
-    }
-    let mut curr_a = a[0];
-    let mut curr_m = m[0];
-
-    for i in 1..a.len() {
-        (curr_a, curr_m) = chinese_remainder_theorem(curr_a, a[i], curr_m, m[i])?;
-    }
-    Some((curr_a, curr_m))
-}
-
-/// X = a (mod m1)  
-/// X = b (mod m2)  
-/// x\*m1+ y\*m2 = g  
-/// X = a\*x\*(m1/g) + b\*y\*(m2/g)  
-
-/// X = a (mod m1)  
-/// X = b (mod m2)  
-/// x\*m1+ y\*m2 = g  
-/// X = a\*x\*(m1/g) + b\*y\*(m2/g)  
-
-#[inline]
-fn chinese_remainder_theorem(a:u64, b:u64, m1:u64, m2:u64)->Option<(u64,u64)>{
-
-    let (g,x,y) = extended_gcd_iterative(m1 as i64,m2 as i64);
-    let g = g as u64;
-    let lcm = (m1/g*m2) as i64;
-    let x = ((x%lcm+lcm)%lcm) as u64;
-    let y = ((y%lcm+lcm)%lcm) as u64;
-    let lcm = lcm as u64;
-    if b.abs_diff(a)%g!=0 {None}
-    else{
-        Some((((a.widening_mul(y)*m2/g+b.widening_mul(x)*m1/g)%lcm as u128) as u64,lcm))
-    }
-}
-
 fn main() {
-    println!("=========================================");
-    println!("🧪 RUNNING EDGE CASE TEST SUITE");
-    println!("=========================================\n");
-
-    // ---------------------------------------------------------
-    // 1. GCD & LCM EDGE CASES
-    // ---------------------------------------------------------
-    println!("--- Testing GCD & LCM Edge Cases ---");
-
-    assert_eq!(gcd_i(0, 5), 5);
-    assert_eq!(gcd_i(12, 0), 12);
-    assert_eq!(gcd_i(0, 0), 0);
-    println!("✅ GCD with Zeros passed.");
-
-    assert_eq!(lcm_i(0, 5), 0);
-    assert_eq!(lcm_i(12, 0), 0);
-    assert_eq!(lcm_i_arr(&[0, 5, 10]), 0);
-    println!("✅ LCM with Zeros passed.");
-
-    assert_eq!(gcd_i(7, 7), 7);
-    assert_eq!(lcm_i(7, 7), 7);
-    println!("✅ GCD/LCM with identical numbers passed.");
-
-
-    // ---------------------------------------------------------
-    // 2. MODULAR INVERSE EDGE CASES
-    // ---------------------------------------------------------
-    println!("\n--- Testing Modular Inverse Edge Cases ---");
-
-    assert_eq!(mod_inv_general(5, 1), Some(0)); // Modulo 1
-    assert_eq!(mod_inv_general(1, 13), Some(1)); // Inverse of 1
-    assert_eq!(mod_inv_general(-2, 7), Some(3)); // Negative numbers
-    println!("✅ Modular Inverse bounds and negatives passed.");
-
-
-    // ---------------------------------------------------------
-    // 3. STANDARD CRT (COPRIME ASSUMED) EDGE CASES
-    // ---------------------------------------------------------
-    println!("\n--- Testing Standard CRT (Coprime) ---");
-
-    // Standard valid case: X = 2(mod 3), X = 3(mod 5), X = 2(mod 7) -> 23
-    assert_eq!(
-        chinese_remainder_theorem_know_that_n_are_coprime(&[2, 3, 2], &[3, 5, 7]),
-        23
-    );
-    println!("✅ Standard coprime system passed.");
-
-    // All remainders are 0 -> Answer should be 0
-    assert_eq!(
-        chinese_remainder_theorem_know_that_n_are_coprime(&[0, 0, 0], &[3, 5, 7]),
-        0
-    );
-    println!("✅ Zero remainders passed.");
-
-    // Single equation -> X = 5 (mod 11)
-    assert_eq!(
-        chinese_remainder_theorem_know_that_n_are_coprime(&[5], &[11]),
-        5
-    );
-    println!("✅ Single equation passed.");
-
-
-    // ---------------------------------------------------------
-    // 4. GENERAL CRT EDGE CASES
-    // ---------------------------------------------------------
-    println!("\n--- Testing General CRT Edge Cases ---");
-
-    // Empty Arrays
-    assert_eq!(chinese_remainder_theorem_general(&[], &[]), None);
-    println!("✅ Empty arrays passed (Returned None).");
-
-    // Single Equation
-    assert_eq!(
-        chinese_remainder_theorem_general(&[5], &[7]),
-        Some((5, 7))
-    );
-    println!("✅ Single equation passed.");
-
-    // Zero remainders
-    assert_eq!(
-        chinese_remainder_theorem_general(&[0, 0], &[4, 6]),
-        Some((0, 12))
-    );
-    println!("✅ Zero remainders passed.");
-
-    // Redundant Equations
-    assert_eq!(
-        chinese_remainder_theorem_general(&[3, 3], &[5, 5]),
-        Some((3, 5))
-    );
-    println!("✅ Redundant equations passed.");
-
-    // Direct Contradiction
-    assert_eq!(
-        chinese_remainder_theorem_general(&[2, 3], &[5, 5]),
-        None
-    );
-    println!("✅ Direct contradiction passed (Returned None).");
-
-    // Modulo 1
-    assert_eq!(
-        chinese_remainder_theorem_general(&[0, 4], &[1, 7]),
-        Some((4, 7))
-    );
-    println!("✅ Trivial Modulo 1 passed.");
-
-
-    // ---------------------------------------------------------
-    // 5. EXTREME LIMITS / OVERFLOW SAFETY
-    // ---------------------------------------------------------
-    println!("\n--- Testing Extreme Limits (General CRT u64 boundaries) ---");
-
-    let m1: u64 = 1_000_000_007;
-    let m2: u64 = 1_000_000_009;
-    let a1: u64 = 123;
-    let a2: u64 = 456;
-
-    match chinese_remainder_theorem_general(&[a1, a2], &[m1, m2]) {
-        Some((x, lcm)) => {
-            assert_eq!(x % m1, a1);
-            assert_eq!(x % m2, a2);
-            assert_eq!(lcm, m1 * m2);
-            println!("✅ Massive Moduli passed without overflowing! (X = {}, LCM = {})", x, lcm);
-        },
-        None => panic!("Massive Moduli test failed unexpectedly."),
+    let (n,m) : (usize,usize)  = int2();
+    let mut segmentTree = SegmentTree::new(&vec![0u64;n],
+    |&a,&b|{a&b},|&a,&b,c,d|{a|b},|&a,&b| {
+            Some(if let Some(a) = a{
+                a|b
+            }else{b})
+        });
+    let mut constraint = Vec::with_capacity(m);
+    for _ in 0..m{
+        let (l,r,q) : (usize,usize,u64)= int3();
+        constraint.push((l,r,q));
+        segmentTree.update_range(l-1,r-1,&q);
     }
-
-    println!("\n🎉 ALL EDGE CASES PASSED SUCCESSFULLY!");
+    for (l,r,q) in constraint{
+        if segmentTree.get_range(l-1,r-1)!=q{
+            print!("NO\n");
+            return;
+        }
+    }
+    print!("YES\n");
+    for i in segmentTree.get_all_elements(){
+        print!("{i} ");
+    }
+    
 }
