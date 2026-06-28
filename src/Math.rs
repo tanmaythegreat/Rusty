@@ -165,6 +165,7 @@ pub fn is_prime(n: u64) -> bool {
 /// Returns vector of (prime, exponent).  
 /// Optimization: Handles 2, then skips even numbers.  
 /// Time: O(sqrt(n))  
+/// 1 cannot be a prime factor  
 #[inline]
 pub fn prime_factors(mut n: u64) -> Vec<(u64, u32)> {
 	let mut factors = Vec::new();
@@ -206,8 +207,8 @@ pub fn divisors(n: u64) -> Vec<u64> {
 
 /// computes divisors upto n (inclusive)  
 /// O(nlog(n))
-pub fn precompute_divisors(n:usize){
-	let divisors : Vec<Vec<u64>> = vec![Vec::with_capacity(n.ilog2()+1);n+1];
+pub fn precompute_divisors(n:usize) -> Vec<Vec<usize>> {
+	let mut divisors : Vec<Vec<usize>> = vec![Vec::with_capacity((n.ilog2() + 1) as usize); n+1];
 	for i in 1..=n{
 		for j in (i..=n).step_by(i){
 			divisors[j].push(i);
@@ -250,9 +251,9 @@ pub fn phi_euler(mut n: u64) -> u64 {
 
 /// Linear Sieve;  
 /// Returns (spf, primes);  
-/// spf[i] = Smallest Prime Factor of i;  
+/// `spf[i]` = Smallest Prime Factor of i;  
 /// primes = List of all primes up to n;  
-/// Time: O(nlog(log(n)))  
+/// Time: O(n)  
 #[inline]
 pub fn linear_sieve(n: usize) -> (Vec<usize>, Vec<usize>) {
 	let mut spf = vec![0; n + 1];
@@ -276,24 +277,100 @@ pub fn linear_sieve(n: usize) -> (Vec<usize>, Vec<usize>) {
 	(spf, primes)
 }
 
-/// Linear Sieve to precompute euler totient for numbers upto n  
-/// Time: O(nlog(log(n)))  
-#[inline]
-pub fn linear_sieve_totient(n: usize) -> (Vec<usize>, Vec<usize>) {
-	let mut totient = [0;n+1];
-	for i in 0..=n{totient[i] = i;}
+/// A general Linear Sieve for any multiplicative function.  
+///
+/// * `n` - The upper bound to compute up to (inclusive).  
+/// * `f_pk` - A closure `|p, k|` that returns the value of f(p^k) -> T.  
+/// * `mul` - A closure `|f_a, f_b|` defines `f(a) * f(b)` [when a and b are coprime].
+/// * `I` - Identity element of `T` (i.e., `mul(I, a) = a` for all a).
+///
+/// * Returns - `(spf, exp, rem, primes, f)`  
+/// `spf[i]` is the smallest prime factor of i, and `i = rem[i] * spf[i]^exp[i]`
+///
+/// Time Complexity: O(n)  
+/// Space Complexity: O(n)  
+///
+/// # Examples
+///
+/// ```
+/// // Example 1: Computing the Möbius function (μ)
+/// let n = 10;
+/// let (_spf, _exp, _rem, _primes, mobius) = linear_sieve_multiplicative_general(
+///     n,
+///     |_p, k| if k == 1 { -1 } else { 0 }, // μ(p^k) is -1 if k=1, else 0
+///     |a, b| a * b,                        // Standard integer multiplication
+///     1i32,                                // Identity element for i32
+/// );
+///
+/// // mobius[1..=6] will be: [1, -1, -1, 0, -1, 1]
+/// assert_eq!(mobius[6], 1); // μ(6) = μ(2) * μ(3) = (-1) * (-1) = 1
+///
+///
+/// // Example 2: Computing Euler's Totient function (φ)
+/// let n = 10;
+/// let (_spf, _exp, _rem, _primes, totient) = linear_sieve_multiplicative_general(
+///     n,
+///     |p, k| p.pow(k as u32 - 1) * (p - 1), // φ(p^k) = p^(k-1) * (p-1)
+///     |a, b| a * b,                         // Standard integer multiplication
+///     1usize,                               // Identity element for usize
+/// );
+///
+/// // totient[1..=6] will be: [1, 1, 2, 2, 4, 2]
+/// assert_eq!(totient[6], 2); // φ(6) = φ(2) * φ(3) = 1 * 2 = 2
+/// ```
+pub fn linear_sieve_multiplicative_general<T: Copy, F: Fn(usize, usize) -> T, G: Fn(T, T) -> T>(n: usize, f_pk: F, mul: G, identity: T,) -> (Vec<usize>, Vec<usize>, Vec<usize>, Vec<usize>, Vec<T>)
+{
+	if n == 0 {
+		return (vec![], vec![], vec![], vec![], vec![]);
+	}
 
-	for i in 2..=n{
-		let mut j = 1;
-		if totient[i]==i {
-			loop {
-				if j * i > n { break; }
-				totient[i * j] -= totient[i * j] / i;
-				j += 1;
+	let mut spf = vec![0; n + 1];
+	let mut exp = vec![0; n + 1];
+	let mut rem = vec![0; n + 1];
+	let mut f = vec![identity; n + 1];
+	let mut primes = Vec::new();
+
+	// Base case: f(1) is always the identity for any non-zero multiplicative function
+	f[1] = identity;
+
+	for i in 2..=n {
+		if spf[i] == 0 {
+			spf[i] = i;
+			exp[i] = 1;
+			rem[i] = 1;
+			f[i] = f_pk(i, 1);
+			primes.push(i);
+		}
+
+		for &p in &primes {
+			if p > spf[i] || i * p > n {
+				break;
+			}
+
+			spf[i * p] = p;
+
+			if p == spf[i] {
+				// Case 1: p divides i. 
+				// The exponent increases, and the coprime remainder stays the same.
+				exp[i * p] = exp[i] + 1;
+				rem[i * p] = rem[i];
+
+				// f(p^(k+1) * m) = mul(f(p^(k+1)), f(m))
+				f[i * p] = mul(f_pk(p, exp[i * p]), f[rem[i * p]]);
+				break;
+			} else {
+				// Case 2: p does not divide i.
+				// p is a brand new prime factor, so its exponent is 1, and the remainder is i.
+				exp[i * p] = 1;
+				rem[i * p] = i;
+
+				// f(p^1 * i) = mul(f(p^1), f(i))
+				f[i * p] = mul(f[p], f[i]);
 			}
 		}
 	}
-	totient
+
+	(spf, exp, rem, primes, f)
 }
 
 /// Precompute Factorials and Inverse Factorials  
@@ -342,7 +419,10 @@ pub fn npr(n: usize, r: usize, fact: &[u64], inv_fact: &[u64], m: u64) -> u64 {
 /// REQUIRES: fact and inv_fact are precomputed up to p-1  
 /// Time: O(p + log_p(n))  
 /// Calculates nCr where n and r are really big  
-/// Precomputing factorial upto n is not possible
+/// Precomputing factorial upto n is not possible  
+/// # Statement  
+/// it states that `nCr =  ∏ ni_C_ri (mod p)`  
+/// where ni and ri are digits of n and r in base p  
 #[inline] 
 pub fn ncr_lucas(mut n: u64, mut r: u64, p: u64, fact: &[u64], inv_fact: &[u64]) -> u64 {
 	if r > n { return 0; }
@@ -466,13 +546,29 @@ pub fn convert_to_base(mut num: u64, to_base: u64) -> Result<Vec<u64>,u64> {
 /// such that all the numbers i between start and end (inclusive) floor(n/i) = val
 #[inline]
 pub fn harmonic_group(n:u64)->Vec<(u64,u64,u64)>{
-	let ans : Vec<(u64,u64,u64)> =  Vec::with_capacity(2*n.isqrt() as usize); 
+	let ans : Vec<(u64,u64,u64)> =  Vec::with_capacity(2*n.isqrt() as usize);
 	let mut start = 1;
 	while start <= n{
 		let val = n/ start;
 		let end = n/val;
-		start = end+1;
 		ans.push((start,end,val));
+		start = end+1;
+	}
+	ans
+}
+/// Harmonic group N = \[n_{1},n_{2},...,n_{i}\]  
+/// list of tuple (start,end,vals) where vals is list of  
+/// such that all the numbers i between start and end (inclusive) floor(N/i) = vals  
+#[inline]
+pub fn harmonic_group_extended(N:Vec<u64>)->Vec<(u64,u64,Vec<u64>)>{
+	let &n = N.iter().max().unwrap();
+	let ans : Vec<(u64,u64,Vec<u64>)> =  Vec::with_capacity(2*n.isqrt() as usize);
+	let mut start = 1;
+	while start <= n{
+		let vals = N.iter().map(|&n|n/ start).collect();
+		let end = (0..N.len()).map(|i|N[i]/vals[i]).min().unwrap();
+		ans.push((start,end,vals));
+		start = end+1;
 	}
 	ans
 }

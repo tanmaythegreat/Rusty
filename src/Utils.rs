@@ -29,6 +29,7 @@ fn partition_point<T,P>(mut start:T,mut end:T,step:T,mut pred: P)->Result<T,u8>
 		else
 		{
 			ans = mid;
+			if ans==start{break;}
 			end = mid-step;
 		}
 	}
@@ -92,4 +93,130 @@ fn find_some_maxima<T,P,U>(mut start:T, mut end:T, step:T, mut f:P) -> Result<(T
 		}
 	}
 	Ok((initial_point,F))
+}
+
+/// For a function f(x), if there is a single minima in the domain [start, end] then  
+/// find_some_minima_discrete(start, end, step, f) returns the value x such that f(x) is minimum  
+/// step should be greater than 0  
+/// Space complexity O(1)  
+/// Time Complexity O(log(size))  
+/// where size is (end-start)/step    
+/// ternary search each step one-thirds the search space   
+fn find_some_minima_discrete<T, P, U>(mut start: T, mut end: T, step: T, mut f: P) -> Result<(T, U), u8>
+                                      where
+	                                      P: FnMut(T) -> U,
+	                                      U: PartialOrd + Copy,
+	                                      T: Copy + Add<Output=T> + Sub<Output=T> + From<u8> + Div<Output=T> + PartialOrd,
+{
+	if step <= T::from(0) { return Err(0); }
+
+	while start < end {
+		let diff = (end - start) / T::from(3);
+
+		if diff <= T::from(1) {
+			let mut best_x = start;
+			let mut best_y = f(start);
+			let mut cur = start + step;
+			while cur <= end {
+				let val = f(cur);
+				if val < best_y {
+					best_y = val;
+					best_x = cur;
+				}
+				cur = cur + step;
+			}
+			return Ok((best_x, best_y));
+		}
+
+		let m1 = start + diff;
+		let m2 = end - diff;
+
+		if f(m1) > f(m2) {
+			start = m1 + step;
+		} else {
+			end = m2 - step;
+		}
+	}
+	let ans = start;
+	let val = f(ans);
+	Ok((ans, val))
+}
+
+
+/// For a function f(x), if there is a single maxima in the domain \[start, end\] then  
+/// find_some_maxima_discrete(start, end, step, f) returns the value x such that f(x) is maximum    
+/// step should be greater than 0  
+/// Space complexity O(1)  
+/// Time Complexity O(log(size))  
+/// where size is (end-start)/step    
+/// ternary search each step one-thirds the search space   
+fn find_some_maxima_discrete<T, P, U>(mut start: T, mut end: T, step: T, mut f: P) -> Result<(T, U), u8>
+                                      where
+	                                      P: FnMut(T) -> U,
+	                                      U: PartialOrd + Copy,
+	                                      T: Copy + Add<Output=T> + Sub<Output=T> + From<u8> + Div<Output=T> + PartialOrd,
+{
+	if step <= T::from(0) { return Err(0); }
+
+	while start < end {
+		let diff = (end - start) / T::from(3);
+
+		if diff <= T::from(1) {
+			let mut best_x = start;
+			let mut best_y = f(start);
+			let mut cur = start + step;
+			while cur <= end {
+				let val = f(cur);
+				if val > best_y {  
+					best_y = val;
+					best_x = cur;
+				}
+				cur = cur + step;
+			}
+			return Ok((best_x, best_y));
+		}
+
+		let m1 = start + diff;
+		let m2 = end - diff;
+
+		if f(m1) < f(m2) {
+			start = m1 + step;
+		} else {
+			end = m2 - step;
+		}
+	}
+
+	let ans = start;
+	let val = f(ans);
+	Ok((ans, val))
+}
+
+/// choose r elements form `arr`  
+fn combinations_iterative<T: Clone>(arr: &[T], r: usize) -> Vec<Vec<T>> {
+	let n = arr.len();
+	if r > n { return vec![]; }
+	if r == 0 { return vec![vec![]]; }
+
+	let mut indices: Vec<usize> = (0..r).collect();
+	let mut result = Vec::new();
+
+	loop {
+		result.push(indices.iter().map(|&i| arr[i].clone()).collect());
+		let mut i = r;
+
+		while i > 0 && indices[i - 1] == i - 1 + n - r {
+			i -= 1;
+		}
+
+		if i == 0 {
+			break;
+		}
+		indices[i - 1] += 1;
+
+		for j in i..r {
+			indices[j] = indices[j - 1] + 1;
+		}
+	}
+
+	result
 }
