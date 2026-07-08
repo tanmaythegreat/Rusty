@@ -23,8 +23,8 @@ impl<V> ParentStore<V> for () {	fn record_parent(&mut self, _child: V, _parent: 
 /// - `parent` map built during traversal (source nodes are NOT keys in this map)
 /// - `Some((value, node))` if `visit` returned `Some(value)` for some node, else `None`
 #[inline]
-pub fn multi_source_bfs<V, W, T, Store, ToVisit, Visit, Adjacent, AdjIter, Add>(
-	sources: impl IntoIterator<Item = (V, W)>,
+pub fn multi_source_bfs<V, WEdge,WPath,WPathIter, T, Store, ToVisit, Visit, Adjacent, AdjIter, Add>(
+	sources: impl IntoIterator<Item = (V, WPath)>,
 	mut parent_store: Store,
 	mut to_visit: ToVisit,
 	mut visit: Visit,
@@ -33,15 +33,17 @@ pub fn multi_source_bfs<V, W, T, Store, ToVisit, Visit, Adjacent, AdjIter, Add>(
 ) -> (Store, Option<(T, V)>)
 	where
 		V: Copy,
-		W: Copy,
+		WEdge : Copy,
+		WPath: Copy,
 		Store: ParentStore<V>,
-		ToVisit: FnMut(V, W, Option<V>) -> TOVISIT<T>,
-		Visit: FnMut(V, W, Option<V>) -> Option<T>,
-		Adjacent: FnMut(V, W, Option<V>) -> AdjIter,
-		AdjIter: Iterator<Item = (V, W)>,
-		Add: FnMut(W, W) -> W,
+		ToVisit: FnMut(V, WPath, Option<V>) -> TOVISIT<T>,
+		Visit: FnMut(V, WPath, Option<V>) -> Option<T>,
+		Adjacent: FnMut(V, WPath, Option<V>) -> AdjIter,
+		AdjIter: Iterator<Item = (V, WEdge)>,
+		Add: FnMut(WPath, WEdge) -> WPathIter,
+		WPathIter:Iterator<Item=WPath>,
 {
-	let mut queue: VecDeque<(V, W, Option<V>)> = VecDeque::new();
+	let mut queue: VecDeque<(V, WPath, Option<V>)> = VecDeque::new();
 
 	for (s, w) in sources {
 		match to_visit(s, w, None) {
@@ -58,19 +60,21 @@ pub fn multi_source_bfs<V, W, T, Store, ToVisit, Visit, Adjacent, AdjIter, Add>(
 
 	while let Some((current, weight, parent_of_current)) = queue.pop_front() {
 		for (neighbor, edge_weight) in adjacent(current, weight, parent_of_current) {
-			let new_weight = add(weight, edge_weight);
-			match to_visit(neighbor, new_weight, Some(current)) {
-				Yes => {
-					parent_store.record_parent(neighbor, current);
+			let new_weights = add(weight, edge_weight);
+			for new_weight in new_weights {
+				match to_visit(neighbor, new_weight, Some(current)) {
+					Yes => {
+						parent_store.record_parent(neighbor, current);
 
-					if let Some(value) = visit(neighbor, new_weight, Some(current)) {
-						return (parent_store, Some((value, neighbor)));
+						if let Some(value) = visit(neighbor, new_weight, Some(current)) {
+							return (parent_store, Some((value, neighbor)));
+						}
+						queue.push_back((neighbor, new_weight, Some(current)));
 					}
-					queue.push_back((neighbor, new_weight, Some(current)));
-				}
-				No => {}
-				Return(r) => {
-					return (parent_store, Some((r, neighbor)));
+					No => {}
+					Return(r) => {
+						return (parent_store, Some((r, neighbor)));
+					}
 				}
 			}
 		}
@@ -87,20 +91,20 @@ pub trait InProgressStore<V> {
 impl<V: Eq + Hash> InProgressStore<V> for HashSet<V> {
 	#[inline(always)]fn insert_node(&mut self, node: V) {self.insert(node);	}
 	#[inline(always)]fn remove_node(&mut self, node: V) {self.remove(&node);	}
-	#[inline(always)]fn is_node_in_stack(&self, node: V) { self.contains(&V)}
+	#[inline(always)]fn is_node_in_stack(&self, node: V) ->bool{ self.contains(&V)}
 }
 
 impl<V> InProgressStore<V> for () {
 	#[inline(always)]fn insert_node(&mut self, _node: V) {}
 	#[inline(always)]fn remove_node(&mut self, _node: V) {}
 	#[inline(always)]
-	fn is_node_in_stack(&self, node: V) { false	}
+	fn is_node_in_stack(&self, node: V)->bool { false	}
 }
 
 impl InProgressStore<usize> for Vec<bool> {
 	#[inline(always)]fn insert_node(&mut self, _node: usize) {self[_node] = true;}
 	#[inline(always)]fn remove_node(&mut self, _node: V) {self[_node] = false ;}
-	#[inline(always)]fn is_node_in_stack(&self, node: usize) {self[node]}
+	#[inline(always)]fn is_node_in_stack(&self, node: usize) -> bool{self[node]}
 }
 
 /// Performs DFS from a single source.
@@ -116,8 +120,8 @@ impl InProgressStore<usize> for Vec<bool> {
 /// from the source down to (but not including) `node` — read directly off the
 /// stack, no parent map needed. `None` if nothing was found.
 #[inline]
-pub fn dfs<V, W, T, Store, ToVisit, Visit, Adjacent, AdjIter, Add, OnExit>(
-	source: (V, W),
+pub fn dfs<V, WEdge,WPath,WPathIter, T, Store, ToVisit, Visit, Adjacent, AdjIter, Add, OnExit>(
+	source: (V, WPath),
 	in_progress: &mut Store,
 	mut to_visit: ToVisit,
 	mut visit: Visit,
@@ -127,17 +131,20 @@ pub fn dfs<V, W, T, Store, ToVisit, Visit, Adjacent, AdjIter, Add, OnExit>(
 ) -> Option<(Vec<V>, T, V)>
 	where
 		V: Copy,
-		W: Copy,
+		WPath: Copy,
+		WEdge: Copy,
 		Store: InProgressStore<V>,
-		ToVisit: FnMut(V, W, Option<V>, &Store) -> TOVISIT<T>,
-		Visit: FnMut(V, W, Option<V>) -> Option<T>,
-		Adjacent: FnMut(V, W, Option<V>) -> AdjIter,
-		AdjIter: Iterator<Item = (V, W)>,
-		Add: FnMut(W, W) -> W,
+		ToVisit: FnMut(V, WPath, Option<V>, &Store) -> TOVISIT<T>,
+		Visit: FnMut(V, WPath, Option<V>) -> Option<T>,
+		Adjacent: FnMut(V, WPath, Option<V>) -> AdjIter,
+		AdjIter: Iterator<Item = (V, WEdge)>,
+		Add: FnMut(WPath, WEdge) -> WPathIter,
+		WPathIter : Iterator<Item=WPath>,
 		OnExit: FnMut(V),
+	
 {
 	let (s, w) = source;
-	let mut stack: Vec<(V, W, Option<V>, AdjIter)> = Vec::new();
+	let mut stack: Vec<(V, WPath, Option<V>, AdjIter)> = Vec::new();
 
 	match to_visit(s, w, None, in_progress) {
 		TOVISIT::Yes => {
@@ -156,21 +163,23 @@ pub fn dfs<V, W, T, Store, ToVisit, Visit, Adjacent, AdjIter, Add, OnExit>(
 		if let Some((neighbor, edge_weight)) = iter.next() {
 			stack.push((current, weight, parent_of_current, iter));
 
-			let new_weight = add(weight, edge_weight);
-			match to_visit(neighbor, new_weight, Some(current), in_progress) {
-				TOVISIT::Yes => {
-					if let Some(value) = visit(neighbor, new_weight, Some(current)) {
-						let path = stack.iter().map(|&(v, _, _, _)| v).collect();
-						return Some((path, value, neighbor));
+			let new_weights = add(weight, edge_weight);
+			for new_weight in new_weights {
+				match to_visit(neighbor, new_weight, Some(current), in_progress) {
+					TOVISIT::Yes => {
+						if let Some(value) = visit(neighbor, new_weight, Some(current)) {
+							let path = stack.iter().map(|&(v, _, _, _)| v).collect();
+							return Some((path, value, neighbor));
+						}
+						in_progress.insert_node(neighbor);
+						let adj = adjacent(neighbor, new_weight, Some(current));
+						stack.push((neighbor, new_weight, Some(current), adj));
 					}
-					in_progress.insert_node(neighbor);
-					let adj = adjacent(neighbor, new_weight, Some(current));
-					stack.push((neighbor, new_weight, Some(current), adj));
-				}
-				TOVISIT::No => {}
-				TOVISIT::Return(r) => {
-					let path = stack.iter().map(|&(v, _, _, _)| v).collect();
-					return Some((path, r, neighbor));
+					TOVISIT::No => {}
+					TOVISIT::Return(r) => {
+						let path = stack.iter().map(|&(v, _, _, _)| v).collect();
+						return Some((path, r, neighbor));
+					}
 				}
 			}
 		} else {
@@ -264,8 +273,8 @@ pub fn dfs_tree<GetChildren, I, OnEntry, OnExit>(
 /// - `parent` map built during traversal (source nodes are NOT keys in this map)
 /// - `Some((value, node))` if `visit` returned `Some(value)` for some node, else `None`
 #[inline]
-pub fn multi_source_dijkstra<V, W, T, Store, ToVisit, Visit, Adjacent, AdjIter, Add>(
-	sources: impl IntoIterator<Item = (V, W)>,
+pub fn multi_source_dijkstra<V, WEdge,WPath,WPathIter, T, Store, ToVisit, Visit, Adjacent, AdjIter, Add>(
+	sources: impl IntoIterator<Item = (V, WPath)>,
 	mut parent_store: Store,
 	mut to_visit: ToVisit,
 	mut visit: Visit,
@@ -274,16 +283,18 @@ pub fn multi_source_dijkstra<V, W, T, Store, ToVisit, Visit, Adjacent, AdjIter, 
 ) -> (Store, Option<(T, V)>)
 	where
 		V: Copy + Ord,
-		W: Copy + Ord,
+		WEdge: Copy,
 		Store: ParentStore<V>,
-		ToVisit: FnMut(V, W, Option<V>) -> TOVISIT<T>,
-		Visit: FnMut(V, W, Option<V>) -> TOVISIT<T>,
-		Adjacent: FnMut(V, W, Option<V>) -> AdjIter,
-		AdjIter: Iterator<Item = (V, W)>,
-		Add: FnMut(W, W) -> W,
+		ToVisit: FnMut(V, WPath, Option<V>) -> TOVISIT<T>,
+		Visit: FnMut(V, WPath, Option<V>) -> TOVISIT<T>,
+		Adjacent: FnMut(V, WPath, Option<V>) -> AdjIter,
+		AdjIter: Iterator<Item = (V, WEdge)>,
+		Add: FnMut(WPath, WEdge) -> WPathIter,
+		WPathIter : Iterator<Item=WPath>,
+		WPath: Ord + Copy
 {
 	use TOVISIT::*;
-	let mut heap: BinaryHeap<Reverse<(W, V, Option<V>)>> = BinaryHeap::new();
+	let mut heap: BinaryHeap<Reverse<(WPath, V, Option<V>)>> = BinaryHeap::new();
 	for (s, w) in sources {
 		match to_visit(s, w, None) {
 			Yes => heap.push(Reverse((w, s, None))),
@@ -300,17 +311,75 @@ pub fn multi_source_dijkstra<V, W, T, Store, ToVisit, Visit, Adjacent, AdjIter, 
 		}
 
 		for (neighbor, edge_weight) in adjacent(current, weight, parent_of_current) {
-			let new_weight = add(weight, edge_weight);
-			match to_visit(neighbor, new_weight, Some(current)) {
-				Yes => {
-					parent_store.record_parent(neighbor, current);
-					heap.push(Reverse((new_weight, neighbor, Some(current))));
+			let new_weights = add(weight, edge_weight);
+			for new_weight in new_weights {
+				match to_visit(neighbor, new_weight, Some(current)) {
+					Yes => {
+						parent_store.record_parent(neighbor, current);
+						heap.push(Reverse((new_weight, neighbor, Some(current))));
+					}
+					No => {}
+					Return(r) => return (parent_store, Some((r, neighbor))),
 				}
-				No => {}
-				Return(r) => return (parent_store, Some((r, neighbor))),
 			}
 		}
 	}
 	(parent_store, None)
 }
 
+
+
+
+/// it computes shortest path between every 2 nodes   
+/// Do not use this function , it is only here so that i dont forget it.  
+/// `n` is numberr of nodes  
+fn floyd_warshall(Adjecncey:Vec<Vec<usize>>,n:usize){
+	for k in 0..n{
+		for i in 0..n{
+			for j in 0..n {
+				if Adjecncey[i][k] < usize::MAX && Adjecncey[k][j] < usize::MAX {
+					Adjecncey[i][j] = Adjecncey[i][j].min(Adjecncey[i][k] + Adjecncey[k][j]);
+					//next_node[i][j] = next_node[i][k]; if A[i][j] was updated
+				}
+			}
+		}
+	}
+}
+
+fn Bellman_Ford_Algorithm(edges:Vec<(usize,usize,i64)>){
+	let mut dist = vec![i64::MAX;v];
+	dist[0] = 0;
+	for _ in 0..v-1{
+		for &(a,b,x) in edges.iter(){
+			if dist[a]!=i64::MAX{
+				dist[b] = dist[b].min(dist[a]+x);
+				// can also do parent[b] = a if dist[b] updated. 
+			}
+		}
+	}
+	// up to here was assuming no -ve cycles
+	
+	// to check -ve cycles, if the next iteration improves anything
+	for &(a,b,x) in edges.iter() {
+		if dist[a] != i64::MAX {
+			if dist[b] < dist[a] + x {
+				dist[b] = dist[a]+x;
+				// means there is a -ve cycle , you may need to check can this -ve cycle lead to the target point, do bfs or dfs
+				
+				// let mut visited = vec![false;v];
+				// if dfs(
+				// 	(b,()),
+				// 	&mut (),
+				// 	|u,_,_,_|{if visited[u]{No}else { visited[u] = true;Yes }},
+				// 	|u,_,_|{if u==v-1{Some(())} else{None}},
+				// 	|u,_,_|{Adj[u].iter().copied()},
+				// 	|a,b|(),
+				// 	|_|{}
+				// ).is_some(){
+				// 	print!("-1\n");
+				// 	return;
+				// }
+			}
+		}
+	}
+}

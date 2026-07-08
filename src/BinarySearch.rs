@@ -190,33 +190,3 @@ fn find_some_maxima_discrete<T, P, U>(mut start: T, mut end: T, step: T, mut f: 
 	let val = f(ans);
 	Ok((ans, val))
 }
-
-/// choose r elements form `arr`  
-fn combinations_iterative<T: Clone>(arr: &[T], r: usize) -> Vec<Vec<T>> {
-	let n = arr.len();
-	if r > n { return vec![]; }
-	if r == 0 { return vec![vec![]]; }
-
-	let mut indices: Vec<usize> = (0..r).collect();
-	let mut result = Vec::new();
-
-	loop {
-		result.push(indices.iter().map(|&i| arr[i].clone()).collect());
-		let mut i = r;
-
-		while i > 0 && indices[i - 1] == i - 1 + n - r {
-			i -= 1;
-		}
-
-		if i == 0 {
-			break;
-		}
-		indices[i - 1] += 1;
-
-		for j in i..r {
-			indices[j] = indices[j - 1] + 1;
-		}
-	}
-
-	result
-}

@@ -5,22 +5,6 @@ use std::io::stdin;
 use std::iter::FromIterator;
 use std::str::{FromStr, SplitAsciiWhitespace};
 
-struct InputReader<'a> {
-	stream: SplitAsciiWhitespace<'a>,
-}
-impl<'a> InputReader<'a> {
-	fn new(s: &'a str) -> Self {
-		Self {
-			stream: s.split_ascii_whitespace(),
-		}
-	}
-	fn next<T:FromStr>(&mut self)->T where <T as FromStr>::Err: Debug{
-		self.stream.next().unwrap().parse::<T>().unwrap()
-	}
-	fn next_word(&mut self) ->&str {
-		self.stream.next().unwrap()
-	}
-}
 #[inline(always)]
 fn int<T: FromStr>() -> T {
 	let mut input = String::new();
@@ -43,7 +27,6 @@ fn int2<T, U>() -> (T, U) where
 	)
 }
 #[inline(always)]
-
 fn int3<T, U,V>() -> (T, U,V) where
 	T: FromStr,
 	U: FromStr,
@@ -62,7 +45,6 @@ fn int3<T, U,V>() -> (T, U,V) where
 	)
 }
 #[inline(always)]
-
 fn int4<T, U,V,W>() -> (T, U,V,W) where
 	T: FromStr,
 	U: FromStr,
@@ -226,18 +208,4 @@ fn word_int<T>() -> (String,T) where
 		it.next().unwrap().to_owned(),
 		it.next().unwrap().parse::<T>().unwrap(),
 	)
-}
-
-fn main() {
-	/*
-	let mut input = String::new();
-	io::stdin().read_to_string(&mut input).unwrap();
-	let mut input = InputReader::new(&input);
-
-	let t:i32=input.next();
-	*/
-	let t:usize = int();
-	for _ in 0..t {
-
-	}
 }

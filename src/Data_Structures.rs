@@ -177,7 +177,6 @@ impl std::fmt::Display for BoolVec {
 }
 // endregion
 
-
 //region Matrix
 
 // ── Struct ────────────────────────────────────────────────────────────────────
