@@ -1,10 +1,2 @@
-2
-aa
-bb
-3
-bba
-bab
-4
-aaba
-abaa
-0
+1
+100000 0

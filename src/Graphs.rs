@@ -82,6 +82,24 @@ pub fn multi_source_bfs<V, WEdge,WPath,WPathIter, T, Store, ToVisit, Visit, Adja
 
 	(parent_store, None)
 }
+#[inline(always)]
+fn int3<T, U,V>() -> (T, U,V) where
+	T: FromStr,
+	U: FromStr,
+	V: FromStr,
+	T::Err: Debug,
+	U::Err: Debug,
+	V::Err: Debug,{
+	let mut input = String::new();
+	stdin().read_line(&mut input).unwrap();
+
+	let mut it = input.split_whitespace();
+	(
+		it.next().unwrap().parse::<T>().unwrap(),
+		it.next().unwrap().parse::<U>().unwrap(),
+		it.next().unwrap().parse::<V>().unwrap(),
+	)
+}
 
 pub trait InProgressStore<V> {	
 	fn insert_node(&mut self, node: V);
