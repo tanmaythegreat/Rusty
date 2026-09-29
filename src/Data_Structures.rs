@@ -1,9 +1,10 @@
 use std::fmt;
 use std::ops::{Add, Mul, Index, IndexMut};
-// region BoolVec
+use std::ops::{BitAnd, BitOr, BitXor, Not, Shl, Shr};
 use std::ops::Index;
+
+// region BoolVec
 const BITS: usize = usize::BITS as usize;
-use std::ops::{BitAnd, BitOr, BitXor, Not};
 
 #[derive(Clone)]
 struct BoolVec {
@@ -102,6 +103,33 @@ impl BoolVec {
 	fn count_false(&self) -> usize {
 		self.len - self.true_count
 	}
+
+	/// Rotates all bits left by `n` positions (mod `len`): the bit at index `i` moves to
+	/// index `(i + n) % len`, so bits that fall off the high end wrap back around to the
+	/// low end. Length is unchanged. No-op on an empty BoolVec.
+	fn rotate_left(&self, n: usize) -> BoolVec {
+		if self.len == 0 {
+			return self.clone();
+		}
+		let n = n % self.len;
+		if n == 0 {
+			return self.clone();
+		}
+		let left_part = self << n;
+		let right_part = self >> (self.len - n);
+		&left_part | &right_part
+	}
+
+	/// Rotates all bits right by `n` positions (mod `len`): the bit at index `i` moves to
+	/// index `(i - n) % len`, so bits that fall off the low end wrap back around to the
+	/// high end. Length is unchanged. No-op on an empty BoolVec.
+	fn rotate_right(&self, n: usize) -> BoolVec {
+		if self.len == 0 {
+			return self.clone();
+		}
+		let n = n % self.len;
+		self.rotate_left(self.len - n)
+	}
 }
 
 // AND: bv1 & bv2
@@ -154,6 +182,70 @@ impl Not for &BoolVec {
 	}
 }
 
+// SHL: bv << n  (index 0 is treated as the least-significant bit)
+impl Shl<usize> for &BoolVec {
+	type Output = BoolVec;
+	/// Shifts every bit toward higher indices by `n` positions. Bits shifted past
+	/// index `len - 1` are discarded; the vacated low-index bits become `false`.
+	/// Shifting by `n >= len` yields an all-`false` vector of the same length.
+	fn shl(self, n: usize) -> BoolVec {
+		if n >= self.len {
+			return BoolVec::filled(self.len, false);
+		}
+		let word_shift = n / BITS;
+		let bit_shift = n % BITS;
+		let chunks = self.data.len();
+		let mut data = vec![0usize; chunks];
+		for i in (word_shift..chunks).rev() {
+			let src = i - word_shift;
+			let mut word = self.data[src] << bit_shift;
+			if bit_shift > 0 && src > 0 {
+				word |= self.data[src - 1] >> (BITS - bit_shift);
+			}
+			data[i] = word;
+		}
+		// clear any bits pushed past `len` within the last chunk
+		let leftover = self.len % BITS;
+		if leftover != 0 {
+			let mask = (1 << leftover) - 1;
+			if let Some(last) = data.last_mut() {
+				*last &= mask;
+			}
+		}
+		let true_count = data.iter().map(|x| x.count_ones() as usize).sum();
+		BoolVec { data, len: self.len, true_count }
+	}
+}
+
+// SHR: bv >> n  (index 0 is treated as the least-significant bit)
+impl Shr<usize> for &BoolVec {
+	type Output = BoolVec;
+	/// Shifts every bit toward lower indices by `n` positions. Bits shifted past
+	/// index `0` are discarded; the vacated high-index bits become `false`.
+	/// Shifting by `n >= len` yields an all-`false` vector of the same length.
+	fn shr(self, n: usize) -> BoolVec {
+		if n >= self.len {
+			return BoolVec::filled(self.len, false);
+		}
+		let word_shift = n / BITS;
+		let bit_shift = n % BITS;
+		let chunks = self.data.len();
+		let mut data = vec![0usize; chunks];
+		for i in 0..(chunks - word_shift) {
+			let src = i + word_shift;
+			let mut word = self.data[src] >> bit_shift;
+			if bit_shift > 0 {
+				if let Some(&next) = self.data.get(src + 1) {
+					word |= next << (BITS - bit_shift);
+				}
+			}
+			data[i] = word;
+		}
+		let true_count = data.iter().map(|x| x.count_ones() as usize).sum();
+		BoolVec { data, len: self.len, true_count }
+	}
+}
+
 impl Index<usize> for BoolVec {
 	type Output = bool;
 	fn index(&self, index: usize) -> &Self::Output {
@@ -175,6 +267,178 @@ impl std::fmt::Display for BoolVec {
 		write!(f, "]")
 	}
 }
+// endregion
+
+//region Simple Matrix
+
+/// A generic 2-D matrix with contiguous, row-major heap storage.
+///
+/// Only the operations needed for matrix×matrix and matrix×vector
+/// multiplication are kept.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Matrix<T> {
+	rows: usize,
+	cols: usize,
+	data: Vec<T>,
+}
+
+// ── Construction ──────────────────────────────────────────────────────────────
+
+impl<T: Clone> Matrix<T> {
+	/// Construct a matrix from a flat, row-major `Vec<T>`.
+	///
+	/// # Panics
+	///
+	/// Panics if `data.len() != rows * cols`.
+	pub fn from_vec(rows: usize, cols: usize, data: Vec<T>) -> Self {
+		assert_eq!(
+			data.len(),
+			rows * cols,
+			"data length {} != rows({}) * cols({})",
+			data.len(),
+			rows,
+			cols
+		);
+		Self { rows, cols, data }
+	}
+}
+
+impl<T: Default + Clone> Matrix<T> {
+	/// Construct a matrix filled with `Default::default()`.
+	pub fn zeros(rows: usize, cols: usize) -> Self {
+		Self { rows, cols, data: vec![T::default(); rows * cols] }
+	}
+}
+
+// ── Dimensions & element access ───────────────────────────────────────────────
+
+impl<T> Matrix<T> {
+	/// Return the number of rows.
+	pub fn rows(&self) -> usize { self.rows }
+
+	/// Return the number of columns.
+	pub fn cols(&self) -> usize { self.cols }
+
+	/// Return the shape of the matrix as `(rows, cols)`.
+	pub fn shape(&self) -> (usize, usize) { (self.rows, self.cols) }
+
+	/// Convert a `(row, col)` logical index into a flat `Vec` index.
+	///
+	/// # Panics
+	///
+	/// Panics if `row >= self.rows` or `col >= self.cols`.
+	fn idx(&self, row: usize, col: usize) -> usize {
+		assert!(row < self.rows, "row index {row} out of bounds (rows={})", self.rows);
+		assert!(col < self.cols, "col index {col} out of bounds (cols={})", self.cols);
+		row * self.cols + col
+	}
+
+	/// Return a shared reference to the element at `(row, col)`.
+	pub fn get(&self, row: usize, col: usize) -> &T {
+		&self.data[self.idx(row, col)]
+	}
+
+	/// Return an exclusive reference to the element at `(row, col)`.
+	pub fn get_mut(&mut self, row: usize, col: usize) -> &mut T {
+		let i = self.idx(row, col);
+		&mut self.data[i]
+	}
+}
+
+// ── Operator overloads for indexing ───────────────────────────────────────────
+
+impl<T> Index<(usize, usize)> for Matrix<T> {
+	type Output = T;
+
+	fn index(&self, (r, c): (usize, usize)) -> &T {
+		self.get(r, c)
+	}
+}
+
+impl<T> IndexMut<(usize, usize)> for Matrix<T> {
+	fn index_mut(&mut self, (r, c): (usize, usize)) -> &mut T {
+		self.get_mut(r, c)
+	}
+}
+
+// ── Multiplication ────────────────────────────────────────────────────────────
+
+impl<T> Matrix<T>
+where
+	T: Default + Clone + Add<Output = T> + Mul<Output = T>,
+{
+	/// Compute the standard matrix product `self × rhs`.
+	///
+	/// If `self` is `m × k` and `rhs` is `k × n`, the result is `m × n`.
+	/// Uses the standard O(m·k·n) triple-loop algorithm.
+	///
+	/// # Panics
+	///
+	/// Panics if `self.cols != rhs.rows`.
+	///
+	/// # Examples
+	///
+	/// ```rust
+	/// let a = Matrix::from_vec(2, 2, vec![1, 2, 3, 4]);
+	/// let b = Matrix::from_vec(2, 2, vec![5, 6, 7, 8]);
+	/// let c = a.matmul(&b);
+	/// assert_eq!(c[(0, 0)], 19); // 1*5 + 2*7
+	/// assert_eq!(c[(1, 1)], 50); // 3*6 + 4*8
+	/// ```
+	pub fn matmul(&self, rhs: &Self) -> Self {
+		assert_eq!(
+			self.cols, rhs.rows,
+			"matmul: lhs cols ({}) != rhs rows ({})",
+			self.cols, rhs.rows
+		);
+		let mut out = Self::zeros(self.rows, rhs.cols);
+		for r in 0..self.rows {
+			for k in 0..self.cols {
+				let a = self[(r, k)].clone();
+				for c in 0..rhs.cols {
+					let prod = a.clone() * rhs[(k, c)].clone();
+					out[(r, c)] = out[(r, c)].clone() + prod;
+				}
+			}
+		}
+		out
+	}
+
+	/// Compute the matrix-vector product `self × vec`.
+	///
+	/// `vec` must have exactly `self.cols` elements. The result is a
+	/// `Vec<T>` of length `self.rows`.
+	///
+	/// # Panics
+	///
+	/// Panics if `vec.len() != self.cols`.
+	///
+	/// # Examples
+	///
+	/// ```rust
+	/// let m = Matrix::from_vec(2, 2, vec![1, 2, 3, 4]);
+	/// let v = vec![5, 6];
+	/// let result = m.mul_vec(&v);
+	/// assert_eq!(result, vec![17, 39]); // [1*5+2*6, 3*5+4*6]
+	/// ```
+	pub fn mul_vec(&self, vec: &[T]) -> Vec<T> {
+		assert_eq!(
+			self.cols,
+			vec.len(),
+			"mul_vec: matrix cols ({}) != vector len ({})",
+			self.cols,
+			vec.len()
+		);
+		(0..self.rows)
+			.map(|r| {
+				(0..self.cols)
+					.map(|c| self[(r, c)].clone() * vec[c].clone())
+					.fold(T::default(), |acc, prod| acc + prod)
+			})
+			.collect()
+	}
+}
+
 // endregion
 
 //region Matrix
@@ -1014,7 +1278,6 @@ struct DisjointSetUnion {
 	/// Current number of disjoint sets remaining.
 	num_sets: usize,
 }
-
 impl DisjointSetUnion {
 	/// Creates n singleton sets, each element its own parent with size 1.
 	#[inline]
@@ -1025,17 +1288,21 @@ impl DisjointSetUnion {
 			num_sets: n,
 		}
 	}
-
-	/// Finds the root of x, applying path halving to flatten the tree as it walks up.
+	/// Finds the root of x, applying full path compression to flatten the tree as it walks up.
 	#[inline]
 	fn find(&mut self, mut x: usize) -> usize {
-		while self.parent[x] != x {
-			self.parent[x] = self.parent[self.parent[x]];
-			x = self.parent[x];
+		
+		let mut root = x;
+		while self.parent[root] != root {
+			root = self.parent[root];
 		}
-		x
+		while self.parent[x] != root {
+			let next = self.parent[x];
+			self.parent[x] = root;
+			x = next;
+		}
+		root
 	}
-
 	/// Merges the sets containing x and y; returns false if already merged.  
 	/// `on_union(new_parent, old_parent)` lets the caller migrate custom per-set
 	/// data (max, min, sum, etc.) at the moment of merge — passed per-call,
@@ -1055,21 +1322,273 @@ impl DisjointSetUnion {
 		self.num_sets -= 1;
 		true
 	}
-
 	#[inline]
 	fn same_set(&mut self, x: usize, y: usize) -> bool {
 		self.find(x) == self.find(y)
 	}
-
 	#[inline]
 	fn get_set_size(&mut self, x: usize) -> usize {
 		let root = self.find(x);
 		self.size[root]
 	}
-
 	#[inline]
 	fn count_sets(&self) -> usize {
 		self.num_sets
 	}
 }
 // endregion
+
+// region Disjoint Set Union Advance
+struct DisjointSetUnionAdvance<T: Copy, W: Copy, PHI: Fn(T) -> usize, PHI_INV: Fn(usize) -> T, ADD: Fn(W, W) -> W, INVERSE: Fn(W) -> W> {
+	/// parent[i] = (parent of node i, weight of edge i -> parent[i]); if parent[i].0 == i, then i is a root.
+	parent: Vec<(usize, W)>,
+	/// size[i] = number of elements in the set rooted at i (only valid when i is a root).
+	size: Vec<usize>,
+	/// Current number of disjoint sets remaining.
+	num_sets: usize,
+	/// isomorphism
+	isomorphism: PHI,
+	isomorphism_inv: PHI_INV,
+	/// associative and commutative
+	add: ADD,
+	/// `add(w,identity) = w`
+	identity: W,
+	/// `add(inverse(w),w) = identity`
+	additive_inverse: INVERSE,
+}
+impl<T: Copy, W: Copy, PHI: Fn(T) -> usize, PHI_INV: Fn(usize) -> T, ADD: Fn(W, W) -> W, INVERSE: Fn(W) -> W> DisjointSetUnionAdvance<T, W, PHI, PHI_INV, ADD, INVERSE> {
+	/// n is the total number of elements in the dsu, isomorphism maps these n elements to `0..n`
+	/// and isomorphism_inv maps `0..n` to these n elements,
+	#[inline]
+	fn new(n: usize, isomorphism: PHI, isomorphism_inv: PHI_INV, add: ADD, additive_inverse: INVERSE, identity: W) -> Self {
+		DisjointSetUnionAdvance {
+			parent: (0..n).map(|i| (i, identity)).collect(),
+			size: vec![1; n],
+			num_sets: n,
+			isomorphism,
+			isomorphism_inv,
+			additive_inverse,
+			add,
+			identity,
+		}
+	}
+	/// Finds the root of x, applying path halving to flatten the tree as it walks up.
+	/// Returns (root, weight) where `weight` is the accumulated edge weight from x to
+	/// root: `value(x) = value(root) + weight` (in the group sense defined by `add`).
+	#[inline]
+	fn find(&mut self, mut x: usize) -> (usize, W) {
+		let mut w = self.identity;
+		while self.parent[x].0 != x {
+			let (px, wx) = self.parent[x];
+			if self.parent[px].0 != px {
+				// grandparent exists: halve the path, composing weights locally
+				let (gpx, wpx) = self.parent[px];
+				self.parent[x] = (gpx, (self.add)(wx, wpx));
+			}
+			let (nx, nw) = self.parent[x];
+			w = (self.add)(w, nw);
+			x = nx;
+		}
+		(x, w)
+	}
+	/// Merges the sets containing x and y under the constraint `value(x) = value(y) + w`.
+	/// `on_union(new_parent, old_parent)` lets the caller migrate custom per-set
+	/// data (max, min, sum, etc.) at the moment of merge — passed per-call.
+	///
+	/// Returns:
+	/// - `Ok(true)`  — a new merge happened
+	/// - `Ok(false)` — x and y were already in the same set, and `w` is consistent
+	/// - `Err(())`   — x and y were already in the same set, but `w` contradicts
+	///                 the existing relation between them
+	#[inline]
+	fn union(&mut self, x: usize, y: usize, w: W, mut on_union: impl FnMut(usize, usize)) -> Result<bool, ()>
+	         where
+		         W: PartialEq,
+	{
+		let (mut rx, mut wx) = self.find(x);
+		let (mut ry, mut wy) = self.find(y);
+
+		if rx == ry {
+			let expected = (self.add)(wy, w);
+			return if wx == expected { Ok(false) } else { Err(()) };
+		}
+
+		if self.size[rx] < self.size[ry] {
+			std::mem::swap(&mut rx, &mut ry);
+			std::mem::swap(&mut wx, &mut wy);
+		}
+		on_union(rx, ry); // old root's data still intact here
+
+		// value(rx)+wx = value(x) = value(y)+w = value(ry)+wy+w
+		// => value(ry) = value(rx) + (wx - wy - w)  — that's the edge weight ry -> rx.
+		let edge_w = (self.add)(wx, (self.additive_inverse)((self.add)(wy, w)));
+		self.parent[ry] = (rx, edge_w);
+		self.size[rx] += self.size[ry];
+		self.num_sets -= 1;
+		Ok(true)
+	}
+	#[inline]
+	fn same_set(&mut self, x: usize, y: usize) -> bool {
+		self.find(x).0 == self.find(y).0
+	}
+	/// Returns `value(x) - value(y)` if x and y are in the same set, else `None`.
+	#[inline]
+	fn diff(&mut self, x: usize, y: usize) -> Option<W> {
+		let (rx, wx) = self.find(x);
+		let (ry, wy) = self.find(y);
+		if rx != ry {
+			return None;
+		}
+		Some((self.add)(wx, (self.additive_inverse)(wy)))
+	}
+	#[inline]
+	fn get_set_size(&mut self, x: usize) -> usize {
+		let root = self.find(x).0;
+		self.size[root]
+	}
+	#[inline]
+	fn count_sets(&self) -> usize {
+		self.num_sets
+	}
+}
+// endregion
+
+// region Disjoint Set Union Advance (Rollback)
+struct DisjointSetUnionAdvanceRollBack<T: Copy, W: Copy, PHI: Fn(T) -> usize, PHI_INV: Fn(usize) -> T, ADD: Fn(W, W) -> W, INVERSE: Fn(W) -> W> {
+	/// parent[i] = (parent of node i, weight of edge i -> parent[i]); if parent[i].0 == i, then i is a root.
+	parent: Vec<(usize, W)>,
+	/// size[i] = number of elements in the set rooted at i (only valid when i is a root).
+	size: Vec<usize>,
+	/// Current number of disjoint sets remaining.
+	num_sets: usize,
+	/// History of merges, for rollback. Each entry is (child_root, new_parent_root, old_size_of_new_parent_root).
+	/// No path compression happens, so this is the *only* mutation `union` ever performs on `parent`/`size`.
+	history: Vec<(usize, usize, usize)>,
+	/// isomorphism
+	isomorphism: PHI,
+	isomorphism_inv: PHI_INV,
+	/// associative and commutative
+	add: ADD,
+	/// `add(w,identity) = w`
+	identity: W,
+	/// `add(inverse(w),w) = identity`
+	additive_inverse: INVERSE,
+}
+impl<T: Copy, W: Copy, PHI: Fn(T) -> usize, PHI_INV: Fn(usize) -> T, ADD: Fn(W, W) -> W, INVERSE: Fn(W) -> W> DisjointSetUnionAdvanceRollBack<T, W, PHI, PHI_INV, ADD, INVERSE> {
+	/// n is the total number of elements in the dsu, isomorphism maps these n elements to `0..n`
+	/// and isomorphism_inv maps `0..n` to these n elements,
+	#[inline]
+	fn new(n: usize, isomorphism: PHI, isomorphism_inv: PHI_INV, add: ADD, additive_inverse: INVERSE, identity: W) -> Self {
+		DisjointSetUnionAdvanceRollBack {
+			parent: (0..n).map(|i| (i, identity)).collect(),
+			size: vec![1; n],
+			num_sets: n,
+			history: Vec::new(),
+			isomorphism,
+			isomorphism_inv,
+			additive_inverse,
+			add,
+			identity,
+		}
+	}
+	/// Finds the root of x. No path compression — this must stay a pure walk with no
+	/// mutation, since compression can't be cheaply/exactly undone by `rollback`.
+	/// Tree height stays O(log n) thanks to union by size alone.
+	/// Returns (root, weight) where `weight` is the accumulated edge weight from x to
+	/// root: `value(x) = value(root) + weight` (in the group sense defined by `add`).
+	#[inline]
+	fn find(&self, mut x: usize) -> (usize, W) {
+		let mut w = self.identity;
+		while self.parent[x].0 != x {
+			let (px, wx) = self.parent[x];
+			w = (self.add)(w, wx);
+			x = px;
+		}
+		(x, w)
+	}
+	/// Merges the sets containing x and y under the constraint `value(x) = value(y) + w`.
+	/// `on_union(new_parent, old_parent)` lets the caller migrate custom per-set
+	/// data (max, min, sum, etc.) at the moment of merge — passed per-call.
+	///
+	/// Returns:
+	/// - `Ok(true)`  — a new merge happened (pushes one entry onto the rollback history)
+	/// - `Ok(false)` — x and y were already in the same set, and `w` is consistent
+	/// - `Err(())`   — x and y were already in the same set, but `w` contradicts
+	///                 the existing relation between them
+	#[inline]
+	fn union(&mut self, x: usize, y: usize, w: W, mut on_union: impl FnMut(usize, usize)) -> Result<bool, ()>
+	         where
+		         W: PartialEq,
+	{
+		let (mut rx, mut wx) = self.find(x);
+		let (mut ry, mut wy) = self.find(y);
+
+		if rx == ry {
+			let expected = (self.add)(wy, w);
+			return if wx == expected { Ok(false) } else { Err(()) };
+		}
+
+		if self.size[rx] < self.size[ry] {
+			std::mem::swap(&mut rx, &mut ry);
+			std::mem::swap(&mut wx, &mut wy);
+		}
+		on_union(rx, ry); // old root's data still intact here
+
+		// value(rx)+wx = value(x) = value(y)+w = value(ry)+wy+w
+		// => value(ry) = value(rx) + (wx - wy - w)  — that's the edge weight ry -> rx.
+		let edge_w = (self.add)(wx, (self.additive_inverse)((self.add)(wy, w)));
+
+		self.history.push((ry, rx, self.size[rx]));
+		self.parent[ry] = (rx, edge_w);
+		self.size[rx] += self.size[ry];
+		self.num_sets -= 1;
+		Ok(true)
+	}
+	/// Returns a checkpoint token representing the current state. Pass it to `rollback`
+	/// later to undo every `union` performed since this call.
+	#[inline]
+	fn checkpoint(&self) -> usize {
+		self.history.len()
+	}
+	/// Undoes `union` calls one at a time (most recent first) until `history.len()`
+	/// matches `checkpoint`. Panics if `checkpoint > self.history.len()`.
+	///
+	/// Note: this only reverts the DSU's own structural state (parent/size/num_sets).
+	/// If your `on_union` callback mutated external per-set data, undoing *that* is the
+	/// caller's responsibility — e.g. by snapshotting it alongside `checkpoint()`.
+	#[inline]
+	fn rollback(&mut self, checkpoint: usize) {
+		assert!(checkpoint <= self.history.len(), "checkpoint is ahead of current history");
+		while self.history.len() > checkpoint {
+			let (ry, rx, old_size_rx) = self.history.pop().unwrap();
+			self.parent[ry] = (ry, self.identity);
+			self.size[rx] = old_size_rx;
+			self.num_sets += 1;
+		}
+	}
+	#[inline]
+	fn same_set(&self, x: usize, y: usize) -> bool {
+		self.find(x).0 == self.find(y).0
+	}
+	/// Returns `value(x) - value(y)` if x and y are in the same set, else `None`.
+	#[inline]
+	fn diff(&self, x: usize, y: usize) -> Option<W> {
+		let (rx, wx) = self.find(x);
+		let (ry, wy) = self.find(y);
+		if rx != ry {
+			return None;
+		}
+		Some((self.add)(wx, (self.additive_inverse)(wy)))
+	}
+	#[inline]
+	fn get_set_size(&self, x: usize) -> usize {
+		let root = self.find(x).0;
+		self.size[root]
+	}
+	#[inline]
+	fn count_sets(&self) -> usize {
+		self.num_sets
+	}
+}
+// endregion
+

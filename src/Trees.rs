@@ -343,9 +343,6 @@ struct SegmentTree<T,B,C,D,V,E> where
 	/// next power-of-two padding size (cached to avoid recomputing)
 	n_padded: usize,
 	/// flat array of (val, lazy) pairs — one allocation, adjacent in memory
-	// CHANGE: single Vec<(T, Option<T>)> instead of two separate Vecs.
-	//         val and lazy for node i now live at nodes[i].0 / nodes[i].1 —
-	//         adjacent bytes, one cache-line fetch covers both.
 	nodes: Vec<(T, Option<V>)>,
 	combiner : B,
 	/// `updater(old_val,update_by_parameter,left,right)->new_val`

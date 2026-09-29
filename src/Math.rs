@@ -4,7 +4,7 @@ use std::random::random;
 /// Greatest Common Divisor  
 /// Time: O(log(min(a, b)))  
 #[inline]
-pub fn gcd(mut a: u64, mut b: u64) -> u64 {
+fn gcd(mut a: u64, mut b: u64) -> u64 {
 	while b != 0 {
 		let r = a % b;
 		a = b;
@@ -16,7 +16,7 @@ pub fn gcd(mut a: u64, mut b: u64) -> u64 {
 /// Greatest Common Divisor  
 /// Time: O(log(min(a, b)))  
 #[inline]
-pub fn gcd_i(mut a: i64, mut b: i64) -> i64 {
+fn gcd_i(mut a: i64, mut b: i64) -> i64 {
 	while b != 0 {
 		let r = a % b;
 		a = b;
@@ -28,7 +28,7 @@ pub fn gcd_i(mut a: i64, mut b: i64) -> i64 {
 /// Greatest Common Divisor  
 /// Time: O(n log(min(a, b)))  
 #[inline]
-pub fn gcd_i_arr(a:&[i64]) -> i64 {
+fn gcd_i_arr(a:&[i64]) -> i64 {
 	let mut g = a[0];
 	for &i in a {
 		g = gcd_i(g, i);
@@ -39,7 +39,7 @@ pub fn gcd_i_arr(a:&[i64]) -> i64 {
 /// Greatest Common Divisor  
 /// Time: O(n log(min(a, b)))  
 #[inline]
-pub fn gcd_arr(a:&[u64]) -> u64 {
+fn gcd_arr(a:&[u64]) -> u64 {
 	let mut g = a[0];
 	for &i in a {
 		g = gcd(g, i);
@@ -50,16 +50,16 @@ pub fn gcd_arr(a:&[u64]) -> u64 {
 /// Optimization: Divides by GCD first to avoid overflow, casts to u128 for safety.  
 /// Time: O(log(min(a, b)))  
 #[inline]
-pub fn lcm(a: u64, b: u64) -> u64 {
+fn lcm(a: u64, b: u64) -> u64 {
 	if a == 0 || b == 0 { return 0; }
-	((a as u128 * b as u128) / gcd(a, b) as u128) as u64
+	((a * b) / gcd(a, b)) 
 }
 
 /// Least Common Multiple
 /// Optimization: Divides by GCD first to avoid overflow, casts to u128 for safety.
 /// Time: O(log(min(a, b)))
 #[inline]
-pub fn lcm_i(a: i64, b: i64) -> i64 {
+fn lcm_i(a: i64, b: i64) -> i64 {
 	if a == 0 || b == 0 { return 0; }
 	((a as i128 * b as i128) / gcd_i(a, b) as i128) as i64
 }
@@ -68,7 +68,7 @@ pub fn lcm_i(a: i64, b: i64) -> i64 {
 /// Optimization: Divides by GCD first to avoid overflow, casts to u128 for safety.  
 /// Time: O(n log(min(a, b)))  
 #[inline]
-pub fn lcm_i_arr(a:&[i64]) -> i64 {
+fn lcm_i_arr(a:&[i64]) -> i64 {
 	let mut l = a[0];
 	for &i in a {
 		l = lcm_i(l, i);
@@ -79,7 +79,7 @@ pub fn lcm_i_arr(a:&[i64]) -> i64 {
 /// Optimization: Divides by GCD first to avoid overflow, casts to u128 for safety.  
 /// Time: O(n log(min(a, b)))  
 #[inline]
-pub fn lcm_arr(a:&[u64]) -> u64 {
+fn lcm_arr(a:&[u64]) -> u64 {
 	let mut l = a[0];
 	for &i in a {
 		l = lcm(l, i);
@@ -90,7 +90,7 @@ pub fn lcm_arr(a:&[u64]) -> u64 {
 /// Extended Euclidean Algorithm  
 /// Returns (g, x, y) such that a*x + b*y = g  
 #[inline]
-pub fn extended_gcd_iterative(mut a: i64, mut b: i64) -> (i64, i64, i64) {
+fn extended_gcd_iterative(mut a: i64, mut b: i64) -> (i64, i64, i64) {
 	let (mut x, mut last_x) = (0, 1);
 	let (mut y, mut last_y) = (1, 0);
 
@@ -111,14 +111,14 @@ pub fn extended_gcd_iterative(mut a: i64, mut b: i64) -> (i64, i64, i64) {
 /// Safe Modular Multiplication (a * b % m)  
 /// Uses u128 to strictly prevent overflow.  
 #[inline]
-pub fn mul_mod(a: u64, b: u64, m: u64) -> u64 {
+fn mul_mod(a: u64, b: u64, m: u64) -> u64 {
 	((a as u128 * b as u128) % m as u128) as u64
 }
 
 /// Modular Exponentiation (base^exp % m)  
 /// Time: O(log exp)  
 #[inline]
-pub fn mod_pow(mut base: u64, mut exp: u64, m: u64) -> u64 {
+fn mod_pow(mut base: u64, mut exp: u64, m: u64) -> u64 {
 	let mut res = 1;
 	base %= m;
 	while exp > 0 {
@@ -133,14 +133,14 @@ pub fn mod_pow(mut base: u64, mut exp: u64, m: u64) -> u64 {
 /// REQUIRES: m is Prime.  
 /// Time: O(log m)  
 #[inline]
-pub fn mod_inv(n: u64, m: u64) -> u64 {
+fn mod_inv(n: u64, m: u64) -> u64 {
 	mod_pow(n, m - 2, m)
 }
 
 /// General Modular Inverse (Extended Euclidean)  
 /// Works even if m is NOT prime. Returns None if inverse doesn't exist.  
 #[inline]
-pub fn mod_inv_general(n: i64, m: i64) -> Option<i64> {
+fn mod_inv_general(n: i64, m: i64) -> Option<i64> {
 	let (g, x, _) = extended_gcd_iterative(n, m);
 	if g != 1 { None } else { Some((x % m + m) % m) }
 }
@@ -149,7 +149,7 @@ pub fn mod_inv_general(n: i64, m: i64) -> Option<i64> {
 /// Optimization: Checks 2, 3, then iterates 6k +/- 1.  
 /// Time: O(sqrt(n))  
 #[inline]
-pub fn is_prime(n: u64) -> bool {
+fn is_prime(n: u64) -> bool {
 	if n <= 1 { return false; }
 	if n <= 3 { return true; }
 	if n % 2 == 0 || n % 3 == 0 { return false; }
@@ -167,7 +167,7 @@ pub fn is_prime(n: u64) -> bool {
 /// Time: O(sqrt(n))  
 /// 1 cannot be a prime factor  
 #[inline]
-pub fn prime_factors(mut n: u64) -> Vec<(u64, u32)> {
+fn prime_factors(mut n: u64) -> Vec<(u64, u32)> {
 	let mut factors = Vec::new();
 	if n % 2 == 0 {
 		let mut cnt = 0;
@@ -191,7 +191,7 @@ pub fn prime_factors(mut n: u64) -> Vec<(u64, u32)> {
 /// Returns a sorted list of all divisors of n.  
 /// Time: O(sqrt(n))  
 #[inline]
-pub fn divisors(n: u64) -> Vec<u64> {
+fn divisors(n: u64) -> Vec<u64> {
 	let mut res = Vec::new();
 	let mut i = 1;
 	while i * i <= n {
@@ -207,7 +207,7 @@ pub fn divisors(n: u64) -> Vec<u64> {
 
 /// computes divisors upto n (inclusive)  
 /// O(nlog(n))
-pub fn precompute_divisors(n:usize) -> Vec<Vec<usize>> {
+fn precompute_divisors(n:usize) -> Vec<Vec<usize>> {
 	let mut divisors : Vec<Vec<usize>> = vec![Vec::with_capacity((n.ilog2() + 1) as usize); n+1];
 	for i in 1..=n{
 		for j in (i..=n).step_by(i){
@@ -216,22 +216,37 @@ pub fn precompute_divisors(n:usize) -> Vec<Vec<usize>> {
 	}divisors
 }
 
+/// computes distinct prime factors up to n (inclusive)
+/// O(n log(log(n)))
+fn precompute_prime_factors(n: usize) -> Vec<Vec<usize>> {
+	let mut prime_factors: Vec<Vec<usize>> = vec![Vec::new(); n + 1];
+	for i in 2..=n {
+		if prime_factors[i].is_empty() {
+			// i is prime, mark it as a factor for all its multiples
+			for j in (i..=n).step_by(i) {
+				prime_factors[j].push(i);
+			}
+		}
+	}
+	prime_factors
+}
+
 ///number of divisors = ∏ (exponent+1)
 /// 
-pub fn number_of_divisors_from_prime_factors(a:&Vec<(u64,u32)>)->u32{
+fn number_of_divisors_from_prime_factors(a:&Vec<(u64,u32)>)->u32{
 	a.iter().fold(1,|r,&i|i.1*(r+1))
 }
 
 ///Sum = ∏ (prime^(exponent+1)-1)/(prime-1)
 /// 
-pub fn sum_of_divisors_from_prime_factors(a:&Vec<(u64,u32)>)->u64{
+fn sum_of_divisors_from_prime_factors(a:&Vec<(u64,u32)>)->u64{
 	a.iter().fold(1,|r,&i|r*(i.0.pow(i.1+1)-1)/(i.0-1))
 }
 /// Euler's Totient Function (Phi)  
 /// Count of numbers <= n coprime to n.  
 /// Time: O(sqrt(n))  
 #[inline]
-pub fn phi_euler(mut n: u64) -> u64 {
+fn phi_euler(mut n: u64) -> u64 {
 	let mut result = n;
 	if n % 2 == 0 {
 		while n % 2 == 0 { n /= 2; }
@@ -255,7 +270,7 @@ pub fn phi_euler(mut n: u64) -> u64 {
 /// primes = List of all primes up to n;  
 /// Time: O(n)  
 #[inline]
-pub fn linear_sieve(n: usize) -> (Vec<usize>, Vec<usize>) {
+fn linear_sieve(n: usize) -> (Vec<usize>, Vec<usize>) {
 	let mut spf = vec![0; n + 1];
 	let mut primes = Vec::new();
 
@@ -318,7 +333,7 @@ pub fn linear_sieve(n: usize) -> (Vec<usize>, Vec<usize>) {
 /// // totient[1..=6] will be: [1, 1, 2, 2, 4, 2]
 /// assert_eq!(totient[6], 2); // φ(6) = φ(2) * φ(3) = 1 * 2 = 2
 /// ```
-pub fn linear_sieve_multiplicative_general<T: Copy, F: Fn(usize, usize) -> T, G: Fn(T, T) -> T>(n: usize, f_pk: F, mul: G, identity: T,) -> (Vec<usize>, Vec<usize>, Vec<usize>, Vec<usize>, Vec<T>)
+fn linear_sieve_multiplicative_general<T: Copy, F: Fn(usize, usize) -> T, G: Fn(T, T) -> T>(n: usize, f_pk: F, mul: G, identity: T,) -> (Vec<usize>, Vec<usize>, Vec<usize>, Vec<usize>, Vec<T>)
 {
 	if n == 0 {
 		return (vec![], vec![], vec![], vec![], vec![]);
@@ -377,7 +392,7 @@ pub fn linear_sieve_multiplicative_general<T: Copy, F: Fn(usize, usize) -> T, G:
 /// Returns (fact, inv_fact) vectors  
 /// Time: O(n)  
 #[inline]
-pub fn precompute_factorials(n: usize, m: u64) -> (Vec<u64>, Vec<u64>) {
+fn precompute_factorials(n: usize, m: u64) -> (Vec<u64>, Vec<u64>) {
 	let mut fact = vec![1; n + 1];
 	let mut inv_fact = vec![1; n + 1];
 
@@ -399,7 +414,7 @@ pub fn precompute_factorials(n: usize, m: u64) -> (Vec<u64>, Vec<u64>) {
 /// Calculate nCr efficiently  
 /// Time: O(1)  
 #[inline]
-pub fn ncr(n: usize, r: usize, fact: &[u64], inv_fact: &[u64], m: u64) -> u64 {
+fn ncr(n: usize, r: usize, fact: &[u64], inv_fact: &[u64], m: u64) -> u64 {
 	if r > n { return 0; }
 	let num = fact[n];
 	let den = mul_mod(inv_fact[r], inv_fact[n - r], m);
@@ -409,7 +424,7 @@ pub fn ncr(n: usize, r: usize, fact: &[u64], inv_fact: &[u64], m: u64) -> u64 {
 /// Calculate nPr efficiently  
 /// Time: O(1)  
 #[inline]
-pub fn npr(n: usize, r: usize, fact: &[u64], inv_fact: &[u64], m: u64) -> u64 {
+fn npr(n: usize, r: usize, fact: &[u64], inv_fact: &[u64], m: u64) -> u64 {
 	if r > n { return 0; }
 	mul_mod(fact[n], inv_fact[n - r], m)  
 }
@@ -424,7 +439,7 @@ pub fn npr(n: usize, r: usize, fact: &[u64], inv_fact: &[u64], m: u64) -> u64 {
 /// it states that `nCr =  ∏ ni_C_ri (mod p)`  
 /// where ni and ri are digits of n and r in base p  
 #[inline] 
-pub fn ncr_lucas(mut n: u64, mut r: u64, p: u64, fact: &[u64], inv_fact: &[u64]) -> u64 {
+fn ncr_lucas(mut n: u64, mut r: u64, p: u64, fact: &[u64], inv_fact: &[u64]) -> u64 {
 	if r > n { return 0; }
 
 	let mut result = 1;
@@ -450,7 +465,7 @@ pub fn ncr_lucas(mut n: u64, mut r: u64, p: u64, fact: &[u64], inv_fact: &[u64])
 /// Works even if moduli are NOT pairwise coprime.  
 /// uses 2 variable chinese_remainder_theorem function 
 /// Returns Option<(final_remainder, final_lcm)> .i.e X=final_remainder (mod final lcm)
-pub fn chinese_remainder_theorem_general(a: &[u64], m: &[u64]) -> Option<(u64, u64)> {
+fn chinese_remainder_theorem_general(a: &[u64], m: &[u64]) -> Option<(u64, u64)> {
 	assert_eq!(a.len(), m.len(), "Arrays must be of equal length");
 	if a.is_empty() {
 		return None;
@@ -522,7 +537,7 @@ fn chinese_remainder_theorem_know_that_n_are_coprime(a:&[i64],n:&[i64])->i128
 /// Converts a `u64` number to a vector of digits in the given base.  
 /// The most significant digit will be at index 0.
 #[inline] 
-pub fn convert_to_base(mut num: u64, to_base: u64) -> Result<Vec<u64>,u64> {
+fn convert_to_base(mut num: u64, to_base: u64) -> Result<Vec<u64>,u64> {
 	if to_base < 2 {
 		return Err(to_base);
 	}
@@ -545,7 +560,7 @@ pub fn convert_to_base(mut num: u64, to_base: u64) -> Result<Vec<u64>,u64> {
 /// list of tuple (start,end,val)
 /// such that all the numbers i between start and end (inclusive) floor(n/i) = val
 #[inline]
-pub fn harmonic_group(n:u64)->Vec<(u64,u64,u64)>{
+fn harmonic_group(n:u64)->Vec<(u64,u64,u64)>{
 	let ans : Vec<(u64,u64,u64)> =  Vec::with_capacity(2*n.isqrt() as usize);
 	let mut start = 1;
 	while start <= n{
@@ -560,7 +575,7 @@ pub fn harmonic_group(n:u64)->Vec<(u64,u64,u64)>{
 /// list of tuple (start,end,vals) where vals is list of  
 /// such that all the numbers i between start and end (inclusive) floor(N/i) = vals  
 #[inline]
-pub fn harmonic_group_extended(N:Vec<u64>)->Vec<(u64,u64,Vec<u64>)>{
+fn harmonic_group_extended(N:Vec<u64>)->Vec<(u64,u64,Vec<u64>)>{
 	let &n = N.iter().max().unwrap();
 	let ans : Vec<(u64,u64,Vec<u64>)> =  Vec::with_capacity(2*n.isqrt() as usize);
 	let mut start = 1;
@@ -576,7 +591,7 @@ pub fn harmonic_group_extended(N:Vec<u64>)->Vec<(u64,u64,Vec<u64>)>{
 
 ///binary exponenciation with a custom multiplication rule
 #[inline]
-pub fn binary_exponentiation<T:Clone,U:FnMut(&mut T,&T)>(base:T,exponent:usize,mut multiply:U)->Option<T>
+fn binary_exponentiation<T:Clone,U:FnMut(&mut T,&T)>(base:T,exponent:usize,mut multiply:U)->Option<T>
 {
 	if exponent==0{
 		return None;

@@ -82,24 +82,6 @@ pub fn multi_source_bfs<V, WEdge,WPath,WPathIter, T, Store, ToVisit, Visit, Adja
 
 	(parent_store, None)
 }
-#[inline(always)]
-fn int3<T, U,V>() -> (T, U,V) where
-	T: FromStr,
-	U: FromStr,
-	V: FromStr,
-	T::Err: Debug,
-	U::Err: Debug,
-	V::Err: Debug,{
-	let mut input = String::new();
-	stdin().read_line(&mut input).unwrap();
-
-	let mut it = input.split_whitespace();
-	(
-		it.next().unwrap().parse::<T>().unwrap(),
-		it.next().unwrap().parse::<U>().unwrap(),
-		it.next().unwrap().parse::<V>().unwrap(),
-	)
-}
 
 pub trait InProgressStore<V> {	
 	fn insert_node(&mut self, node: V);
@@ -109,7 +91,7 @@ pub trait InProgressStore<V> {
 impl<V: Eq + Hash> InProgressStore<V> for HashSet<V> {
 	#[inline(always)]fn insert_node(&mut self, node: V) {self.insert(node);	}
 	#[inline(always)]fn remove_node(&mut self, node: V) {self.remove(&node);	}
-	#[inline(always)]fn is_node_in_stack(&self, node: V) ->bool{ self.contains(&V)}
+	#[inline(always)]fn is_node_in_stack(&self, node: V) ->bool{ self.contains(&node)}
 }
 
 impl<V> InProgressStore<V> for () {
@@ -121,7 +103,7 @@ impl<V> InProgressStore<V> for () {
 
 impl InProgressStore<usize> for Vec<bool> {
 	#[inline(always)]fn insert_node(&mut self, _node: usize) {self[_node] = true;}
-	#[inline(always)]fn remove_node(&mut self, _node: V) {self[_node] = false ;}
+	#[inline(always)]fn remove_node(&mut self, _node: usize) {self[_node] = false ;}
 	#[inline(always)]fn is_node_in_stack(&self, node: usize) -> bool{self[node]}
 }
 
@@ -132,7 +114,7 @@ impl InProgressStore<usize> for Vec<bool> {
 /// `visit(node, weight, parent)`: mark visited. return `Some` to stop, `None` to continue.
 /// `adjacent(node, weight, parent)`: neighbors + edge weights.
 /// `add`: combines accumulated weight with edge weight.
-/// `on_exit(node)`: called when backtracking past `node` (all neighbors exhausted).
+/// `on_exit(node,weight,parent)`: called when backtracking past `node` (all neighbors exhausted).
 ///
 /// Returns `Some((path, value, node))` where `path` is the chain of ancestors
 /// from the source down to (but not including) `node` — read directly off the
@@ -158,8 +140,8 @@ pub fn dfs<V, WEdge,WPath,WPathIter, T, Store, ToVisit, Visit, Adjacent, AdjIter
 		AdjIter: Iterator<Item = (V, WEdge)>,
 		Add: FnMut(WPath, WEdge) -> WPathIter,
 		WPathIter : Iterator<Item=WPath>,
-		OnExit: FnMut(V),
-	
+		OnExit: FnMut(V,WPath,Option<V>),
+
 {
 	let (s, w) = source;
 	let mut stack: Vec<(V, WPath, Option<V>, AdjIter)> = Vec::new();
@@ -202,12 +184,13 @@ pub fn dfs<V, WEdge,WPath,WPathIter, T, Store, ToVisit, Visit, Adjacent, AdjIter
 			}
 		} else {
 			in_progress.remove_node(current);
-			on_exit(current);
+			on_exit(current,weight,parent_of_current);
 		}
 	}
 
 	None
 }
+
 
 /// Iterative DFS over a tree with `n` nodes, rooted at `root`.  
 /// Returns `(entry_time, exit_time, order)`, `order` being the preorder  

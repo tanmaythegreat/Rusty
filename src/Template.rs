@@ -19,7 +19,7 @@ fn int2<T, U>() -> (T, U) where
 	U::Err: Debug,{
 	let mut input = String::new();
 	stdin().read_line(&mut input).unwrap();
-
+	
 	let mut it = input.split_whitespace();
 	(
 		it.next().unwrap().parse::<T>().unwrap(),
@@ -120,6 +120,40 @@ fn int6<T, U,V,W,M,N>() -> (T, U,V,W,M,N) where
 		it.next().unwrap().parse::<N>().unwrap()
 	)
 }
+
+#[inline(always)]
+
+fn int6<T, U,V,W,M,N,O>() -> (T, U,V,W,M,N,O) where
+	T: FromStr,
+	U: FromStr,
+	V: FromStr,
+	W: FromStr,
+	M: FromStr,
+	N: FromStr,
+	T::Err: Debug,
+	U::Err: Debug,
+	V::Err: Debug,
+	W::Err: Debug,
+	N::Err: Debug,
+	M::Err: Debug,
+	O::Err: Debug,
+{
+	let mut input = String::new();
+	stdin().read_line(&mut input).unwrap();
+
+	let mut it = input.split_whitespace();
+	(
+		it.next().unwrap().parse::<T>().unwrap(),
+		it.next().unwrap().parse::<U>().unwrap(),
+		it.next().unwrap().parse::<V>().unwrap(),
+		it.next().unwrap().parse::<W>().unwrap(),
+		it.next().unwrap().parse::<M>().unwrap(),
+		it.next().unwrap().parse::<N>().unwrap()
+		it.next().unwrap().parse::<O>().unwrap()
+	)
+}
+
+
 #[inline(always)]
 
 fn array<T: FromStr,B:FromIterator<T>>() -> B {
@@ -176,6 +210,24 @@ fn int_word<T>() -> (T, String) where
 	let mut it = input.split_whitespace();
 	(
 		it.next().unwrap().parse::<T>().unwrap(),
+		it.next().unwrap().to_owned()
+	)
+}
+#[inline(always)]
+
+fn int2_word<T,U>() -> (T,U, String) where
+	T: FromStr,
+	U: FromStr,
+	T::Err: Debug,
+	U::Err: Debug,
+{
+	let mut input = String::new();
+	stdin().read_line(&mut input).unwrap();
+
+	let mut it = input.split_whitespace();
+	(
+		it.next().unwrap().parse::<T>().unwrap(),
+		it.next().unwrap().parse::<U>().unwrap(),
 		it.next().unwrap().to_owned()
 	)
 }
